@@ -14,7 +14,10 @@
       "name": "@atlas/api",
       "version": "0.0.0",
       "dependencies": {
+        "@atlas/auth": "workspace:*",
         "@atlas/core": "workspace:*",
+        "@atlas/db": "workspace:*",
+        "drizzle-orm": "^0.38.0",
         "hono": "^4.6.0",
       },
       "devDependencies": {
@@ -34,6 +37,19 @@
         "@astrojs/check": "^0.9.4",
         "@tailwindcss/vite": "^4.0.0",
         "tailwindcss": "^4.0.0",
+        "typescript": "^5.7.0",
+      },
+    },
+    "packages/auth": {
+      "name": "@atlas/auth",
+      "version": "0.0.0",
+      "dependencies": {
+        "@atlas/db": "workspace:*",
+        "drizzle-orm": "^0.38.0",
+      },
+      "devDependencies": {
+        "@cloudflare/workers-types": "^4.20250101.0",
+        "@types/node": "^26.0.0",
         "typescript": "^5.7.0",
       },
     },
@@ -81,6 +97,8 @@
     "@astrojs/yaml2ts": ["@astrojs/yaml2ts@0.2.4", "", { "dependencies": { "yaml": "^2.8.3" } }, "sha512-8oddpOae35pJsXPQXhTkM0ypfKPskVsh2bCxRtbf7e+/Epw2nReakFYpLKjZMEr75CsoF203PMnCocpfz0s69A=="],
 
     "@atlas/api": ["@atlas/api@workspace:apps/api"],
+
+    "@atlas/auth": ["@atlas/auth@workspace:packages/auth"],
 
     "@atlas/core": ["@atlas/core@workspace:packages/core"],
 

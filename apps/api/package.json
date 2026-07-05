@@ -11,7 +11,10 @@
     "test": "echo 'no tests yet'"
   },
   "dependencies": {
+    "@atlas/auth": "workspace:*",
     "@atlas/core": "workspace:*",
+    "@atlas/db": "workspace:*",
+    "drizzle-orm": "^0.38.0",
     "hono": "^4.6.0"
   },
   "devDependencies": {

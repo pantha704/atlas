@@ -1,0 +1,333 @@
+---
+import Base from '../layouts/Base.astro'
+
+// Onboarding — 3 steps: persona → preset sources → add custom
+// ponytail: single page with JS step transitions, no router needed for 3 steps
+const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? 'http://localhost:8787'
+---
+
+<Base title="Onboarding — Atlas">
+  <main class="mx-auto max-w-2xl px-6 py-12">
+    <h1 class="text-3xl font-bold text-text">Set up your digest</h1>
+    <p class="mt-2 text-text-muted">Three steps. About 2 minutes.</p>
+
+    <!-- Progress indicator -->
+    <div class="mt-8 flex items-center gap-2">
+      <div id="step-dot-1" class="h-2 w-8 rounded-full bg-primary"></div>
+      <div id="step-dot-2" class="h-2 w-8 rounded-full bg-border"></div>
+      <div id="step-dot-3" class="h-2 w-8 rounded-full bg-border"></div>
+    </div>
+
+    <!-- Step 1: Persona -->
+    <section id="step-1" class="mt-12">
+      <h2 class="text-xl font-semibold text-text">What do you work on?</h2>
+      <p class="mt-2 text-sm text-text-muted">This tells Atlas how to score items for you.</p>
+
+      <div class="mt-6 grid gap-3 sm:grid-cols-2">
+        <label class="cursor-pointer rounded-lg border border-border bg-surface p-4 hover:border-primary">
+          <input type="radio" name="persona" value="ml" class="sr-only" />
+          <div class="font-medium text-text">AI/ML Researcher</div>
+          <div class="mt-1 text-sm text-text-muted">Papers, models, training, inference</div>
+        </label>
+        <label class="cursor-pointer rounded-lg border border-border bg-surface p-4 hover:border-primary">
+          <input type="radio" name="persona" value="systems" class="sr-only" />
+          <div class="font-medium text-text">Systems Engineer</div>
+          <div class="mt-1 text-sm text-text-muted">Distributed systems, Rust, Go, k8s</div>
+        </label>
+        <label class="cursor-pointer rounded-lg border border-border bg-surface p-4 hover:border-primary">
+          <input type="radio" name="persona" value="frontend" class="sr-only" />
+          <div class="font-medium text-text">Frontend Developer</div>
+          <div class="mt-1 text-sm text-text-muted">React, Vue, CSS, web standards</div>
+        </label>
+        <label class="cursor-pointer rounded-lg border border-border bg-surface p-4 hover:border-primary">
+          <input type="radio" name="persona" value="devops" class="sr-only" />
+          <div class="font-medium text-text">DevOps / SRE</div>
+          <div class="mt-1 text-sm text-text-muted">CI/CD, observability, cloud, security</div>
+        </label>
+      </div>
+
+      <div class="mt-6">
+        <label for="interests" class="block text-sm font-medium text-text">
+          Or describe in your own words:
+        </label>
+        <textarea
+          id="interests"
+          rows="3"
+          placeholder="e.g. I work on LLM training infrastructure, using PyTorch and CUDA. I care about efficient inference, quantization, and distributed training."
+          class="mt-2 w-full rounded-lg border border-border bg-surface p-3 text-text placeholder:text-text-muted focus:border-primary focus:outline-none"
+        ></textarea>
+      </div>
+
+      <div class="mt-6">
+        <label for="stack" class="block text-sm font-medium text-text">
+          Your tech stack (comma-separated):
+        </label>
+        <input
+          id="stack"
+          type="text"
+          placeholder="rust, python, pytorch, kubernetes, postgres"
+          class="mt-2 w-full rounded-lg border border-border bg-surface p-3 text-text placeholder:text-text-muted focus:border-primary focus:outline-none"
+        />
+      </div>
+
+      <button id="next-1" class="mt-8 rounded-lg bg-primary px-6 py-3 font-semibold text-white hover:bg-primary-hover">
+        Next →
+      </button>
+    </section>
+
+    <!-- Step 2: Preset Sources -->
+    <section id="step-2" class="mt-12 hidden">
+      <h2 class="text-xl font-semibold text-text">Pick your sources</h2>
+      <p class="mt-2 text-sm text-text-muted">Atlas will fetch from these daily and score against your profile.</p>
+
+      <div id="preset-sources" class="mt-6 space-y-3">
+        <label class="flex items-center gap-3 rounded-lg border border-border bg-surface p-4 cursor-pointer hover:border-primary">
+          <input type="checkbox" data-source="hackernews" checked class="h-4 w-4 rounded border-border" />
+          <div>
+            <div class="font-medium text-text">Hacker News</div>
+            <div class="text-sm text-text-muted">Top 30 stories, min 150 points, with comments</div>
+          </div>
+        </label>
+        <label class="flex items-center gap-3 rounded-lg border border-border bg-surface p-4 cursor-pointer hover:border-primary">
+          <input type="checkbox" data-source="arxiv-ai" checked class="h-4 w-4 rounded border-border" />
+          <div>
+            <div class="font-medium text-text">arXiv: cs.AI, cs.LG</div>
+            <div class="text-sm text-text-muted">AI/ML research papers, sorted by submission date</div>
+          </div>
+        </label>
+        <label class="flex items-center gap-3 rounded-lg border border-border bg-surface p-4 cursor-pointer hover:border-primary">
+          <input type="checkbox" data-source="arxiv-cl" class="h-4 w-4 rounded border-border" />
+          <div>
+            <div class="font-medium text-text">arXiv: cs.CL, stat.ML</div>
+            <div class="text-sm text-text-muted">NLP + statistical ML papers</div>
+          </div>
+        </label>
+        <label class="flex items-center gap-3 rounded-lg border border-border bg-surface p-4 cursor-pointer hover:border-primary">
+          <input type="checkbox" data-source="reddit-ml" checked class="h-4 w-4 rounded border-border" />
+          <div>
+            <div class="font-medium text-text">Reddit: r/MachineLearning, r/LocalLLaMA</div>
+            <div class="text-sm text-text-muted">ML community discussions, top comments</div>
+          </div>
+        </label>
+        <label class="flex items-center gap-3 rounded-lg border border-border bg-surface p-4 cursor-pointer hover:border-primary">
+          <input type="checkbox" data-source="github-releases" checked class="h-4 w-4 rounded border-border" />
+          <div>
+            <div class="font-medium text-text">GitHub: vLLM, SGLang, Triton releases</div>
+            <div class="text-sm text-text-muted">Inference engine releases, auto-tracked</div>
+          </div>
+        </label>
+        <label class="flex items-center gap-3 rounded-lg border border-border bg-surface p-4 cursor-pointer hover:border-primary">
+          <input type="checkbox" data-source="ossinsight" checked class="h-4 w-4 rounded border-border" />
+          <div>
+            <div class="font-medium text-text">OSS Insight Trending</div>
+            <div class="text-sm text-text-muted">Top star-gaining repos in last 24h</div>
+          </div>
+        </label>
+      </div>
+
+      <div class="mt-8 flex gap-4">
+        <button id="back-2" class="rounded-lg border border-border bg-surface px-6 py-3 font-medium text-text hover:border-primary">
+          ← Back
+        </button>
+        <button id="next-2" class="rounded-lg bg-primary px-6 py-3 font-semibold text-white hover:bg-primary-hover">
+          Next →
+        </button>
+      </div>
+    </section>
+
+    <!-- Step 3: Custom + Done -->
+    <section id="step-3" class="mt-12 hidden">
+      <h2 class="text-xl font-semibold text-text">Add custom sources (optional)</h2>
+      <p class="mt-2 text-sm text-text-muted">Add RSS feeds, GitHub repos, or Telegram channels you follow.</p>
+
+      <div class="mt-6 space-y-4">
+        <div>
+          <label for="rss-url" class="block text-sm font-medium text-text">RSS feed URL</label>
+          <div class="mt-2 flex gap-2">
+            <input id="rss-url" type="url" placeholder="https://blog.example.com/feed.xml" class="flex-1 rounded-lg border border-border bg-surface p-3 text-text placeholder:text-text-muted focus:border-primary focus:outline-none" />
+            <button id="add-rss" class="rounded-lg border border-border bg-surface px-4 py-3 text-sm font-medium text-text hover:border-primary">Add</button>
+          </div>
+        </div>
+        <div>
+          <label for="gh-repo" class="block text-sm font-medium text-text">GitHub repo (owner/repo)</label>
+          <div class="mt-2 flex gap-2">
+            <input id="gh-repo" type="text" placeholder="openai/codex" class="flex-1 rounded-lg border border-border bg-surface p-3 text-text placeholder:text-text-muted focus:border-primary focus:outline-none" />
+            <button id="add-repo" class="rounded-lg border border-border bg-surface px-4 py-3 text-sm font-medium text-text hover:border-primary">Add</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="added-sources" class="mt-6 space-y-2"></div>
+
+      <div class="mt-8 flex gap-4">
+        <button id="back-3" class="rounded-lg border border-border bg-surface px-6 py-3 font-medium text-text hover:border-primary">
+          ← Back
+        </button>
+        <button id="finish" class="rounded-lg bg-primary px-6 py-3 font-semibold text-white hover:bg-primary-hover">
+          Finish — generate my digest
+        </button>
+      </div>
+
+      <p id="finish-status" class="mt-4 text-sm text-text-muted"></p>
+    </section>
+  </main>
+
+  <script is:inline define:vars={{ apiUrl: API_URL }}>
+    const personaMap = {
+      ml: { interests: 'AI/ML research, model training, inference, LLMs', stack: ['python', 'pytorch', 'cuda', 'transformers'] },
+      systems: { interests: 'distributed systems, systems programming, infrastructure', stack: ['rust', 'go', 'kubernetes', 'linux'] },
+      frontend: { interests: 'frontend development, web standards, UI/UX', stack: ['typescript', 'react', 'css', 'vite'] },
+      devops: { interests: 'DevOps, SRE, cloud infrastructure, observability', stack: ['terraform', 'kubernetes', 'prometheus', 'grafana'] },
+    }
+
+    let selectedPersona = null
+    let interests = ''
+    let stack = []
+    const customSources = []
+
+    // Step 1 → 2
+    document.getElementById('next-1')?.addEventListener('click', () => {
+      const radio = document.querySelector('input[name="persona"]:checked')
+      selectedPersona = radio?.value ?? null
+      const interestsEl = document.getElementById('interests')
+      const stackEl = document.getElementById('stack')
+      interests = interestsEl?.value ?? ''
+      stack = stackEl?.value?.split(',').map(s => s.trim()).filter(Boolean) ?? []
+
+      // If persona selected, use its defaults when user didn't fill in
+      if (selectedPersona && personaMap[selectedPersona]) {
+        if (!interests) interests = personaMap[selectedPersona].interests
+        if (stack.length === 0) stack = personaMap[selectedPersona].stack
+      }
+
+      if (!interests && !selectedPersona) {
+        alert('Pick a persona or describe your work')
+        return
+      }
+
+      showStep(2)
+    })
+
+    // Step 2 → 3
+    document.getElementById('next-2')?.addEventListener('click', () => {
+      showStep(3)
+    })
+
+    // Step 3 → Finish
+    document.getElementById('finish')?.addEventListener('click', async () => {
+      const btn = document.getElementById('finish')
+      const status = document.getElementById('finish-status')
+      btn.disabled = true
+      status.textContent = 'Saving profile and sources...'
+
+      try {
+        // Save profile
+        const profileRes = await fetch(`${apiUrl}/profile`, {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ interests, stack, tagWeights: {} }),
+        })
+        if (!profileRes.ok) throw new Error('Failed to save profile')
+
+        // Save preset sources
+        const presetChecks = document.querySelectorAll('#preset-sources input[type=checkbox]:checked')
+        for (const cb of presetChecks) {
+          const source = cb.dataset.source
+          await addSource(source)
+        }
+
+        // Save custom sources
+        for (const cs of customSources) {
+          await fetch(`${apiUrl}/sources`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(cs),
+          })
+        }
+
+        status.textContent = 'Profile saved. Generating your personalized digest... (~2-5 min)'
+
+        // Trigger per-user digest
+        const digestRes = await fetch(`${apiUrl}/my-digest`, { credentials: 'include' })
+        if (digestRes.ok) {
+          status.textContent = 'Done! Redirecting to your dashboard...'
+          setTimeout(() => location.href = '/dashboard', 2000)
+        } else {
+          status.textContent = 'Profile saved. Your digest will be ready shortly. Going to dashboard...'
+          setTimeout(() => location.href = '/dashboard', 2000)
+        }
+      } catch (e) {
+        status.textContent = `Error: ${e.message}`
+        btn.disabled = false
+      }
+    })
+
+    // Back buttons
+    document.getElementById('back-2')?.addEventListener('click', () => showStep(1))
+    document.getElementById('back-3')?.addEventListener('click', () => showStep(2))
+
+    // Add custom source buttons
+    document.getElementById('add-rss')?.addEventListener('click', () => {
+      const url = document.getElementById('rss-url')?.value?.trim()
+      if (!url) return
+      customSources.push({ type: 'rss', config: { name: url, url, enabled: true }, enabled: true })
+      renderCustomSources()
+      document.getElementById('rss-url').value = ''
+    })
+
+    document.getElementById('add-repo')?.addEventListener('click', () => {
+      const repo = document.getElementById('gh-repo')?.value?.trim()
+      if (!repo || !repo.includes('/')) return
+      const [owner, name] = repo.split('/')
+      customSources.push({ type: 'github', config: { type: 'repo_releases', owner, repo: name, enabled: true }, enabled: true })
+      renderCustomSources()
+      document.getElementById('gh-repo').value = ''
+    })
+
+    function renderCustomSources() {
+      const container = document.getElementById('added-sources')
+      if (!container) return
+      container.innerHTML = customSources.map((s, i) => {
+        const label = s.type === 'rss' ? s.config.url : `${s.config.owner}/${s.config.repo}`
+        return `<div class="flex items-center justify-between rounded-lg border border-border bg-surface px-4 py-2 text-sm">
+          <span><strong>${s.type}</strong>: ${label}</span>
+          <button onclick="customSources.splice(${i},1);renderCustomSources()" class="text-text-muted hover:text-rose-500">✕</button>
+        </div>`
+      }).join('')
+    }
+
+    async function addSource(key) {
+      const configs = {
+        hackernews: { type: 'hackernews', config: { enabled: true, fetchTopStories: 30, minScore: 150 }, enabled: true },
+        'arxiv-ai': { type: 'arxiv', config: { enabled: true, categories: [{ category: 'cs.AI', enabled: true }, { category: 'cs.LG', enabled: true }], maxResults: 30 }, enabled: true },
+        'arxiv-cl': { type: 'arxiv', config: { enabled: true, categories: [{ category: 'cs.CL', enabled: true }, { category: 'stat.ML', enabled: true }], maxResults: 30 }, enabled: true },
+        'reddit-ml': { type: 'reddit', config: { enabled: true, subreddits: [{ subreddit: 'MachineLearning', enabled: true, sort: 'hot', timeFilter: 'day', fetchLimit: 25, minScore: 10 }, { subreddit: 'LocalLLaMA', enabled: true, sort: 'hot', timeFilter: 'day', fetchLimit: 25, minScore: 10 }], users: [], fetchComments: 5 }, enabled: true },
+        'github-releases': { type: 'github', config: { type: 'repo_releases', owner: 'vllm-project', repo: 'vllm', enabled: true }, enabled: true },
+        ossinsight: { type: 'ossinsight', config: { enabled: true, period: 'past_24_hours', languages: ['All', 'Python', 'TypeScript'], keywords: [], minStars: 50, maxItems: 20 }, enabled: true },
+      }
+      const cfg = configs[key]
+      if (!cfg) return
+      await fetch(`${apiUrl}/sources`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cfg),
+      })
+    }
+
+    function showStep(n) {
+      for (let i = 1; i <= 3; i++) {
+        const el = document.getElementById(`step-${i}`)
+        const dot = document.getElementById(`step-dot-${i}`)
+        if (el) el.classList.toggle('hidden', i !== n)
+        if (dot) dot.className = `h-2 w-8 rounded-full ${i <= n ? 'bg-primary' : 'bg-border'}`
+      }
+    }
+
+    // Make renderCustomSources global for inline onclick
+    window.renderCustomSources = renderCustomSources
+    window.customSources = customSources
+  </script>
+</Base>

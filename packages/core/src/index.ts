@@ -7,3 +7,11 @@ export { createAIClient, type AIClient, type CompletionRequest } from './ai/clie
 export { ContentAnalyzer, mergeTopicDuplicates } from './ai/analyzer'
 export { DailySummarizer } from './ai/summarizer'
 export { DEFAULT_CONFIG } from './default-config'
+export {
+  PerUserAnalyzer,
+  applyFeedbackToProfile,
+  deriveInterestsFromWeights,
+  defaultProfile,
+  type UserProfile,
+  type FeedbackSignal,
+} from './profile'

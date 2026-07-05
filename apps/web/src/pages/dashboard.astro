@@ -3,7 +3,7 @@ import Base from '../layouts/Base.astro'
 
 const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? 'http://localhost:8787'
 
-// ponytail: server-side fetch for the public digest; no client JS needed for first paint
+// ponytail: server-side fetch for the public digest; client JS handles auth state + per-user
 let digestMd: string | null = null
 let digestError: string | null = null
 try {
@@ -12,19 +12,14 @@ try {
     const data = (await res.json()) as { markdown?: string }
     digestMd = data.markdown ?? null
   } else {
-    digestError =
-      'Pipeline has not run yet. Click "Trigger pipeline" below or wait for the daily cron.'
+    digestError = 'Pipeline has not run yet. Click "Trigger pipeline" or wait for the daily cron.'
   }
 } catch {
   digestError = 'API not reachable. Run `bun dev` in apps/api first.'
 }
 
-// ponytail: minimal markdown-to-HTML for the digest.
-// Full markdown renderer is overkill for our controlled summarizer output.
 function renderMarkdown(md: string): string {
   let html = md.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-
-  // Unescape the HTML elements we control (details/summary, lists, anchors)
   html = html
     .replace(
       /&lt;details&gt;&lt;summary&gt;([\s\S]*?)&lt;\/summary&gt;/g,
@@ -36,35 +31,22 @@ function renderMarkdown(md: string): string {
     .replace(/&lt;\/li&gt;/g, '</li>')
     .replace(/&lt;\/details&gt;/g, '</details>')
     .replace(/&lt;a id="item-(\d+)"&gt;&lt;\/a&gt;/g, '<a id="item-$1"></a>')
-
-  // Headings: ## [title](url) ⭐️ N/10
   html = html.replace(
     /^## \[([^\]]+)\]\(([^)]+)\) ⭐️ (\d+(?:\.\d+)?)\/10/gm,
     (_m, title, url, score) =>
       `<h2><a href="${url}">${title}</a> <span class="score-badge" data-tier="${scoreTier(Number(score))}">${score}/10</span></h2>`,
   )
-
-  // TOC: N. [title](#item-N) ⭐️ score/10
   html = html.replace(
     /^(\d+)\. \[([^\]]+)\]\(#item-(\d+)\) ⭐️ (\d+(?:\.\d+)?)\/10/gm,
     (_m, num, title, id, score) =>
       `<div class="toc-item"><span class="toc-num">${num}.</span> <a href="#item-${id}">${title}</a> <span class="score-badge" data-tier="${scoreTier(Number(score))}">${score}/10</span></div>`,
   )
-
-  // H1
   html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>')
-  // HR
   html = html.replace(/^---$/gm, '<hr />')
-  // Blockquote
   html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>')
-  // Bold
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-  // Code spans
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
-  // Links
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
-
-  // Paragraphs
   html = html
     .split('\n\n')
     .map((block) => {
@@ -75,7 +57,6 @@ function renderMarkdown(md: string): string {
       return `<p>${trimmed.replace(/\n/g, '<br />')}</p>`
     })
     .join('\n')
-
   return html
 }
 
@@ -89,23 +70,31 @@ function scoreTier(score: number): 'high' | 'good' | 'mid' | 'low' {
 
 <Base title="Dashboard — Atlas">
   <main class="mx-auto max-w-4xl px-6 py-12">
-    <div class="flex items-center justify-between">
+    <!-- Auth-aware header -->
+    <div id="auth-header" class="flex items-center justify-between">
       <div>
         <h1 class="text-3xl font-bold text-text">Today's digest</h1>
-        <p class="mt-2 text-text-muted">
-          Public global digest. <a href="/signup" class="text-primary">Sign up</a> to personalize with
-          connected sources and impact reasoning.
+        <p id="digest-subtitle" class="mt-2 text-text-muted">
+          Public global digest. <a href="/signup" class="text-primary">Sign up</a> to personalize.
         </p>
       </div>
-      <button
-        id="triggerBtn"
-        class="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-text hover:border-primary"
-      >
-        ↻ Trigger pipeline
-      </button>
+      <div id="auth-actions" class="flex gap-3">
+        <a href="/signup" class="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-hover">Sign up</a>
+      </div>
     </div>
-    <p id="triggerStatus" class="mt-2 text-sm text-text-muted"></p>
 
+    <!-- Trigger + regenerate buttons -->
+    <div class="mt-4 flex gap-3">
+      <button id="triggerBtn" class="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-text hover:border-primary">
+        ↻ Trigger global pipeline
+      </button>
+      <button id="myDigestBtn" class="hidden rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-text hover:border-primary">
+        ↻ Generate my personalized digest
+      </button>
+      <p id="triggerStatus" class="self-center text-sm text-text-muted"></p>
+    </div>
+
+    <!-- Digest content -->
     <div id="digestContainer" class="mt-12">
       {digestError && (
         <div class="rounded-lg border border-border bg-surface-2 p-8 text-center text-text-muted">
@@ -119,16 +108,49 @@ function scoreTier(score: number): 'high' | 'good' | 'mid' | 'low' {
   </main>
 
   <script is:inline define:vars={{ apiUrl: API_URL }}>
-    const btn = document.getElementById('triggerBtn')
-    const status = document.getElementById('triggerStatus')
-    btn?.addEventListener('click', async () => {
+    // Auth state check
+    async function checkAuth() {
+      try {
+        const res = await fetch(`${apiUrl}/auth/me`, { credentials: 'include' })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.user) {
+            // Logged in — show personalized UI
+            const subtitle = document.getElementById('digest-subtitle')
+            const actions = document.getElementById('auth-actions')
+            const myDigestBtn = document.getElementById('myDigestBtn')
+            if (subtitle) subtitle.innerHTML = `Welcome back, <strong>${data.user.name}</strong>. <a href="/profile" class="text-primary">Edit profile</a> · <a href="/sources" class="text-primary">Manage sources</a>`
+            if (actions) actions.innerHTML = `<a href="/profile" class="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-text hover:border-primary">Profile</a><button onclick="logout()" class="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-text hover:border-primary">Logout</button>`
+            if (myDigestBtn) myDigestBtn.classList.remove('hidden')
+            // Try fetching per-user digest
+            loadMyDigest()
+          }
+        }
+      } catch {}
+    }
+
+    async function loadMyDigest() {
+      // ponytail: only fetch if user has sources configured; otherwise show public digest
+      // Per-user digest is triggered manually (expensive — runs AI per user)
+    }
+
+    async function logout() {
+      await fetch(`${apiUrl}/auth/logout`, { method: 'POST', credentials: 'include' })
+      location.reload()
+    }
+    window.logout = logout
+
+    // Global pipeline trigger
+    document.getElementById('triggerBtn')?.addEventListener('click', async () => {
+      const btn = document.getElementById('triggerBtn')
+      const status = document.getElementById('triggerStatus')
       btn.disabled = true
-      status.textContent = 'Running pipeline (fetch → score → summarize)... takes ~2-5 min'
+      status.textContent = 'Running global pipeline... ~2-5 min'
       try {
         const res = await fetch(`${apiUrl}/trigger`, { method: 'POST' })
         const data = await res.json()
         if (data.ok) {
-          status.textContent = `Done — ${data.items} items scored. Refreshing...`
+          status.textContent = `Done — ${data.items} items. Refreshing...`
           setTimeout(() => location.reload(), 2000)
         } else {
           status.textContent = `Failed: ${data.error ?? 'unknown'}`
@@ -139,5 +161,30 @@ function scoreTier(score: number): 'high' | 'good' | 'mid' | 'low' {
         btn.disabled = false
       }
     })
+
+    // Per-user digest trigger
+    document.getElementById('myDigestBtn')?.addEventListener('click', async () => {
+      const btn = document.getElementById('myDigestBtn')
+      const status = document.getElementById('triggerStatus')
+      btn.disabled = true
+      status.textContent = 'Generating your personalized digest... fetching → per-user scoring → summarizing (~3-8 min)'
+      try {
+        const res = await fetch(`${apiUrl}/my-digest`, { credentials: 'include' })
+        const data = await res.json()
+        if (res.ok && data.markdown) {
+          status.textContent = 'Done! Rendering your digest...'
+          // Replace digest content
+          location.reload()
+        } else {
+          status.textContent = `Failed: ${data.error ?? 'unknown'}`
+          btn.disabled = false
+        }
+      } catch (e) {
+        status.textContent = `Error: ${e.message}`
+        btn.disabled = false
+      }
+    })
+
+    checkAuth()
   </script>
 </Base>

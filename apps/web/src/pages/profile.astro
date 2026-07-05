@@ -1,0 +1,138 @@
+---
+import Base from '../layouts/Base.astro'
+
+const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? 'http://localhost:8787'
+---
+
+<Base title="Profile — Atlas">
+  <main class="mx-auto max-w-2xl px-6 py-12">
+    <h1 class="text-3xl font-bold text-text">Your profile</h1>
+    <p class="mt-2 text-text-muted">
+      Atlas scores every item against this. The more you use it, the sharper it gets.
+    </p>
+
+    <form id="profile-form" class="mt-8 space-y-6">
+      <div>
+        <label for="interests" class="block text-sm font-medium text-text">What do you work on?</label>
+        <textarea
+          id="interests"
+          rows="4"
+          class="mt-2 w-full rounded-lg border border-border bg-surface p-3 text-text placeholder:text-text-muted focus:border-primary focus:outline-none"
+          placeholder="e.g. I work on LLM training infrastructure, using PyTorch and CUDA. I care about efficient inference, quantization, and distributed training."
+        ></textarea>
+      </div>
+
+      <div>
+        <label for="stack" class="block text-sm font-medium text-text">Tech stack (comma-separated)</label>
+        <input
+          id="stack"
+          type="text"
+          class="mt-2 w-full rounded-lg border border-border bg-surface p-3 text-text placeholder:text-text-muted focus:border-primary focus:outline-none"
+          placeholder="rust, python, pytorch, kubernetes"
+        />
+      </div>
+
+      <div>
+        <label for="language" class="block text-sm font-medium text-text">Digest language</label>
+        <select id="language" class="mt-2 w-full rounded-lg border border-border bg-surface p-3 text-text focus:border-primary focus:outline-none">
+          <option value="en">English</option>
+          <option value="zh">中文</option>
+        </select>
+      </div>
+
+      <div>
+        <label for="threshold" class="block text-sm font-medium text-text">
+          Score threshold: <span id="threshold-val" class="font-mono">7.0</span>
+        </label>
+        <input
+          id="threshold"
+          type="range"
+          min="5"
+          max="9"
+          step="0.5"
+          value="7"
+          class="mt-2 w-full"
+        />
+        <p class="mt-1 text-xs text-text-muted">Higher = fewer items, more curated. Lower = more items, more noise.</p>
+      </div>
+
+      <button
+        type="submit"
+        class="rounded-lg bg-primary px-6 py-3 font-semibold text-white hover:bg-primary-hover"
+      >
+        Save profile
+      </button>
+      <span id="save-status" class="ml-4 text-sm text-text-muted"></span>
+    </form>
+
+    <!-- Tag weights (learned from feedback) -->
+    <div class="mt-12">
+      <h2 class="text-lg font-semibold text-text">Topics you care about</h2>
+      <p class="mt-1 text-sm text-text-muted">Learned from your feedback. Upvote = boost, downvote = reduce.</p>
+      <div id="tag-weights" class="mt-4 flex flex-wrap gap-2">
+        <span class="text-sm text-text-muted">No feedback yet. Upvote or downvote items in your digest to teach Atlas.</span>
+      </div>
+    </div>
+  </main>
+
+  <script is:inline define:vars={{ apiUrl: API_URL }}>
+    async function loadProfile() {
+      try {
+        const res = await fetch(`${apiUrl}/profile`, { credentials: 'include' })
+        if (!res.ok) {
+          if (res.status === 401) { location.href = '/signup'; return }
+          throw new Error('Failed')
+        }
+        const data = await res.json()
+        const p = data.profile
+        document.getElementById('interests').value = p.interests ?? ''
+        document.getElementById('stack').value = (p.stack ?? []).join(', ')
+        document.getElementById('language').value = p.language ?? 'en'
+        document.getElementById('threshold').value = p.threshold ?? 7
+        document.getElementById('threshold-val').textContent = p.threshold ?? '7.0'
+        renderTagWeights(p.tagWeights ?? {})
+      } catch (e) {
+        document.getElementById('save-status').textContent = `Error: ${e.message}`
+      }
+    }
+
+    function renderTagWeights(weights) {
+      const container = document.getElementById('tag-weights')
+      const entries = Object.entries(weights).sort((a, b) => b[1] - a[1])
+      if (!entries.length) return
+      container.innerHTML = entries.map(([tag, weight]) => {
+        const size = Math.min(1 + weight * 0.2, 1.8)
+        return `<span class="rounded-md bg-surface-2 px-3 py-1 text-sm" style="font-size:${size}rem">${tag} <span class="text-text-muted">(${weight})</span></span>`
+      }).join('')
+    }
+
+    document.getElementById('threshold')?.addEventListener('input', (e) => {
+      document.getElementById('threshold-val').textContent = e.target.value
+    })
+
+    document.getElementById('profile-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault()
+      const status = document.getElementById('save-status')
+      status.textContent = 'Saving...'
+      try {
+        const res = await fetch(`${apiUrl}/profile`, {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            interests: document.getElementById('interests').value,
+            stack: document.getElementById('stack').value.split(',').map(s => s.trim()).filter(Boolean),
+            language: document.getElementById('language').value,
+            threshold: parseFloat(document.getElementById('threshold').value),
+          }),
+        })
+        if (!res.ok) throw new Error('Failed')
+        status.textContent = 'Saved!'
+      } catch (err) {
+        status.textContent = `Error: ${err.message}`
+      }
+    })
+
+    loadProfile()
+  </script>
+</Base>

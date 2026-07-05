@@ -17,6 +17,16 @@ export const users = sqliteTable('users', {
   createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
 })
 
+export const sessions = sqliteTable('sessions', {
+  id: text('id').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  tokenHash: text('token_hash').notNull(),
+  expiresAt: text('expires_at').notNull(),
+  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+})
+
 export const sources = sqliteTable('sources', {
   id: text('id').primaryKey(),
   userId: text('user_id')
@@ -120,6 +130,7 @@ export const audit = sqliteTable('audit', {
 })
 
 export type User = typeof users.$inferInsert
+export type Session = typeof sessions.$inferInsert
 export type Source = typeof sources.$inferInsert
 export type Item = typeof items.$inferInsert
 export type Score = typeof scores.$inferInsert
