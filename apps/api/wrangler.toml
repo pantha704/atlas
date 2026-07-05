@@ -1,0 +1,13 @@
+name = "atlas-api"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# ponytail: cron folded into api worker; split to apps/cron when schedules diverge
+[triggers]
+crons = ["0 6 * * *"]
+
+# Turso (libSQL) accessed via env vars — see .dev.vars for local
+# [vars] section for non-secret config; secrets via `wrangler secret put`
+[vars]
+TURSO_DATABASE_URL = "libsql://atlas-default.turso.io"

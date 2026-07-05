@@ -1,0 +1,24 @@
+{
+  "name": "atlas",
+  "private": true,
+  "type": "module",
+  "description": "Your personal news agent — what changed, what it means for your stack, what to do next.",
+  "license": "AGPL-3.0-or-later",
+  "packageManager": "bun@1.3.13",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "typecheck": "turbo typecheck",
+    "lint": "biome ci .",
+    "format": "biome format --write .",
+    "test": "turbo test",
+    "ci": "bun run lint && turbo run typecheck build test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "turbo": "^2.5.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": { "bun": ">=1.3.0" }
+}

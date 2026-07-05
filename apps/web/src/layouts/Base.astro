@@ -1,0 +1,56 @@
+---
+import '../styles/global.css'
+
+interface Props {
+  title?: string
+  description?: string
+  lang?: 'en' | 'zh'
+}
+
+const {
+  title = 'Atlas — your personal news agent',
+  description = 'Connect your sources. Atlas tells you what changed, what it means for your stack, and what to do next.',
+  lang = 'en',
+} = Astro.props
+---
+
+<!doctype html>
+<html lang={lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title}</title>
+    <script is:inline>
+      // ponytail: inline theme bootstrap to avoid FOUC; reads localStorage before paint
+      (() => {
+        const t = localStorage.getItem('atlas-theme')
+        if (t === 'dark' || t === 'light') {
+          document.documentElement.setAttribute('data-theme', t)
+        }
+      })()
+    </script>
+  </head>
+  <body>
+    <slot />
+    <button
+      id="theme-toggle"
+      aria-label="Toggle theme"
+      class="fixed bottom-4 right-4 rounded-md border border-border bg-surface px-3 py-2 text-sm text-text-muted hover:text-text"
+    >
+      ◐
+    </button>
+    <script is:inline>
+      const btn = document.getElementById('theme-toggle')
+      btn?.addEventListener('click', () => {
+        const cur = document.documentElement.getAttribute('data-theme')
+        const isDark = cur === 'dark' ||
+          (!cur && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        const next = isDark ? 'light' : 'dark'
+        document.documentElement.setAttribute('data-theme', next)
+        localStorage.setItem('atlas-theme', next)
+      })
+    </script>
+  </body>
+</html>

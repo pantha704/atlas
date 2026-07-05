@@ -1,0 +1,6 @@
+TURSO_DATABASE_URL=libsql://atlas-default.turso.io
+TURSO_AUTH_TOKEN=
+GROQ_API_KEY=
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+BETTER_AUTH_SECRET=dev-only-change-in-prod
