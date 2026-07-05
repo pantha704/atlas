@@ -1,0 +1,25 @@
+{
+  "name": "@atlas/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./scrapers": "./src/scrapers/index.ts",
+    "./ai": "./src/ai/index.ts",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^4.5.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250101.0",
+    "@types/node": "^26.1.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.9"
+  }
+}
