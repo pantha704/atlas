@@ -161,7 +161,7 @@ export interface AIConfig {
   // Groq: cheap filter model + reasoning model
   cheapModel: string // e.g. "llama-3.1-8b-instant" — bulk filter pass
   reasonModel: string // e.g. "llama-3.3-70b-versatile" — top-K + impact
-  apiKeyEnv: string // env var name
+  apiKeyEnv: string // env var name (used when process.env available)
   baseUrl?: string
   temperature: number
   maxTokens: number
@@ -171,6 +171,9 @@ export interface AIConfig {
   // ponytail: gemini fallback fields — single env, optional
   geminiApiKeyEnv?: string
   geminiModel?: string
+  // v1.1: direct key values for CF Workers (no process.env)
+  apiKeyValue?: string
+  geminiApiKeyValue?: string
 }
 
 export interface FilteringConfig {

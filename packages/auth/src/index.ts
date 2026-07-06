@@ -31,7 +31,7 @@ export interface AuthResult {
 export function githubAuthUrl(env: AuthEnv, state: string): string {
   const params = new URLSearchParams({
     client_id: env.GITHUB_CLIENT_ID,
-    redirect_uri: `${env.APP_URL}/api/auth/callback`,
+    redirect_uri: `${env.APP_URL}/auth/callback`,
     scope: 'read:user user:email',
     state,
   })

@@ -45,7 +45,7 @@ class GroqGeminiClient implements AIClient {
   }
 
   private async groqComplete(req: CompletionRequest, model: string): Promise<string> {
-    const apiKey = process.env[this.cfg.apiKeyEnv]
+    const apiKey = this.cfg.apiKeyValue ?? process.env[this.cfg.apiKeyEnv]
     if (!apiKey) throw new Error(`Missing env ${this.cfg.apiKeyEnv}`)
     const baseUrl = this.cfg.baseUrl ?? 'https://api.groq.com/openai/v1'
     const res = await fetch(`${baseUrl}/chat/completions`, {
@@ -78,7 +78,7 @@ class GroqGeminiClient implements AIClient {
   }
 
   private async geminiComplete(req: CompletionRequest, model: string): Promise<string> {
-    const apiKey = process.env[this.cfg.geminiApiKeyEnv ?? '']
+    const apiKey = this.cfg.geminiApiKeyValue ?? process.env[this.cfg.geminiApiKeyEnv ?? '']
     if (!apiKey) throw new Error(`Missing env ${this.cfg.geminiApiKeyEnv}`)
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
     const res = await fetch(url, {

@@ -10,5 +10,6 @@ crons = ["0 6 * * *"]
 # Turso (libSQL) accessed via env vars — see .dev.vars for local
 # [vars] section for non-secret config; secrets via `wrangler secret put`
 [vars]
-TURSO_DATABASE_URL = "libsql://atlas-default.turso.io"
-APP_URL = "http://localhost:8787"
+TURSO_DATABASE_URL = "libsql://atlas-pantha704.aws-ap-south-1.turso.io"
+GITHUB_CLIENT_ID = "Ov23lig3t21oPhh2bCFd"
+APP_URL = "https://atlas-api.glm-panther.workers.dev"

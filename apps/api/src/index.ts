@@ -119,7 +119,7 @@ app.get('/digest', (c) => {
 
 app.post('/trigger', async (c) => {
   if (!c.env.GROQ_API_KEY) return c.json({ error: 'GROQ_API_KEY not configured' }, 500)
-  const config: Config = DEFAULT_CONFIG
+  const config: Config = { ...DEFAULT_CONFIG, ai: buildAIConfig(c.env) }
   const aiClient = createAIClient(config.ai)
   const { Orchestrator } = await import('@atlas/core')
   const orchestrator = new Orchestrator(config, aiClient)
@@ -400,6 +400,7 @@ app.get('/my-digest', async (c) => {
   // Build per-user config from user's sources + default config as base
   const config: Config = {
     ...DEFAULT_CONFIG,
+    ai: buildAIConfig(c.env),
     sources: buildUserConfig(userSources, DEFAULT_CONFIG.sources),
   }
   const profile: UserProfile = profileRow[0]
@@ -860,6 +861,15 @@ app.all('*', (c) => c.json({ error: 'not found' }, 404))
 
 // ===== Helpers =====
 
+// Build AI config with actual key values from worker env (CF Workers has no process.env)
+function buildAIConfig(env: Env): Config['ai'] {
+  return {
+    ...DEFAULT_CONFIG.ai,
+    apiKeyValue: env.GROQ_API_KEY,
+    geminiApiKeyValue: env.GEMINI_API_KEY,
+  }
+}
+
 function extractStateFromCookie(cookie: string | null | undefined): string | null {
   if (!cookie) return null
   const match = cookie.match(/atlas_oauth_state=([^;]+)/)
@@ -989,7 +999,7 @@ export default {
       console.warn('GROQ_API_KEY missing — skipping pipeline')
       return
     }
-    const config: Config = DEFAULT_CONFIG
+    const config: Config = { ...DEFAULT_CONFIG, ai: buildAIConfig(env) }
     const aiClient = createAIClient(config.ai)
     const { Orchestrator } = await import('@atlas/core')
     const orchestrator = new Orchestrator(config, aiClient)
