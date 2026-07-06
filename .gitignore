@@ -14,3 +14,5 @@ coverage
 .claude/
 AGENTS.md
 CLAUDE.md
+bundle-api
+api/_bundle.mjs
