@@ -6,10 +6,10 @@ const root = process.cwd()
 await esbuild.build({
   entryPoints: ['apps/api/src/index.ts'],
   bundle: true,
-  format: 'esm',
+  format: 'cjs',
   platform: 'node',
   target: 'es2022',
-  outfile: 'api/_bundle.mjs',
+  outfile: 'api/_bundle.cjs',
   tsconfig: 'tsconfig.base.json',
   plugins: [{
     name: 'workspace-resolver',
@@ -21,4 +21,4 @@ await esbuild.build({
     }
   }],
 })
-console.log('bundled')
+console.log('bundled to api/_bundle.cjs')

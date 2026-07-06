@@ -1,6 +1,9 @@
 import { handle } from 'hono/vercel'
 import { Hono } from 'hono'
-import { app as apiApp } from './_bundle.mjs'
+// ponytail: CJS bundle avoids ESM circular dep issues
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const bundle = require('./_bundle.cjs')
+const apiApp = bundle.app
 
 export const config = { runtime: 'nodejs' }
 
