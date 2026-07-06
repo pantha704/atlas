@@ -1,4 +1,5 @@
 ---
+import { renderDigestMarkdown } from '@atlas/core'
 import Base from '../layouts/Base.astro'
 
 const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? 'http://localhost:8787'
@@ -16,55 +17,6 @@ try {
   }
 } catch {
   digestError = 'API not reachable. Run `bun dev` in apps/api first.'
-}
-
-function renderMarkdown(md: string): string {
-  let html = md.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  html = html
-    .replace(
-      /&lt;details&gt;&lt;summary&gt;([\s\S]*?)&lt;\/summary&gt;/g,
-      '<details><summary>$1</summary>',
-    )
-    .replace(/&lt;ul&gt;/g, '<ul>')
-    .replace(/&lt;\/ul&gt;/g, '</ul>')
-    .replace(/&lt;li&gt;/g, '<li>')
-    .replace(/&lt;\/li&gt;/g, '</li>')
-    .replace(/&lt;\/details&gt;/g, '</details>')
-    .replace(/&lt;a id="item-(\d+)"&gt;&lt;\/a&gt;/g, '<a id="item-$1"></a>')
-  html = html.replace(
-    /^## \[([^\]]+)\]\(([^)]+)\) ⭐️ (\d+(?:\.\d+)?)\/10/gm,
-    (_m, title, url, score) =>
-      `<h2><a href="${url}">${title}</a> <span class="score-badge" data-tier="${scoreTier(Number(score))}">${score}/10</span></h2>`,
-  )
-  html = html.replace(
-    /^(\d+)\. \[([^\]]+)\]\(#item-(\d+)\) ⭐️ (\d+(?:\.\d+)?)\/10/gm,
-    (_m, num, title, id, score) =>
-      `<div class="toc-item"><span class="toc-num">${num}.</span> <a href="#item-${id}">${title}</a> <span class="score-badge" data-tier="${scoreTier(Number(score))}">${score}/10</span></div>`,
-  )
-  html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>')
-  html = html.replace(/^---$/gm, '<hr />')
-  html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>')
-  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-  html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
-  html = html
-    .split('\n\n')
-    .map((block) => {
-      const trimmed = block.trim()
-      if (!trimmed) return ''
-      if (/^<(h[12]|blockquote|hr|div|details|ul|ol)/.test(trimmed)) return trimmed
-      if (/^<a id=/.test(trimmed)) return trimmed
-      return `<p>${trimmed.replace(/\n/g, '<br />')}</p>`
-    })
-    .join('\n')
-  return html
-}
-
-function scoreTier(score: number): 'high' | 'good' | 'mid' | 'low' {
-  if (score >= 9) return 'high'
-  if (score >= 7) return 'good'
-  if (score >= 5) return 'mid'
-  return 'low'
 }
 ---
 
@@ -102,7 +54,7 @@ function scoreTier(score: number): 'high' | 'good' | 'mid' | 'low' {
         </div>
       )}
       {digestMd && (
-        <div class="prose-atlas" set:html={renderMarkdown(digestMd)}></div>
+        <div class="prose-atlas" set:html={renderDigestMarkdown(digestMd)}></div>
       )}
     </div>
   </main>

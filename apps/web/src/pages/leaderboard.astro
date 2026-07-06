@@ -1,0 +1,53 @@
+---
+import Base from '../layouts/Base.astro'
+
+const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? 'http://localhost:8787'
+---
+
+<Base title="Leaderboard — Atlas">
+  <main class="mx-auto max-w-3xl px-6 py-12">
+    <h1 class="text-3xl font-bold text-text">Leaderboard</h1>
+    <p class="mt-2 text-text-muted">Top contributors to the Atlas source market.</p>
+
+    <div id="leaderboard-content" class="mt-8">
+      <p class="text-text-muted">Loading...</p>
+    </div>
+  </main>
+
+  <script is:inline define:vars={{ apiUrl: API_URL }}>
+    async function loadLeaderboard() {
+      try {
+        const res = await fetch(`${apiUrl}/leaderboard`)
+        const data = await res.json()
+        const lb = data.leaderboard ?? []
+        if (!lb.length) {
+          document.getElementById('leaderboard-content').innerHTML = '<p class="text-text-muted">No contributors yet. Be the first to <a href="/market/submit" class="text-primary">submit a source</a>!</p>'
+          return
+        }
+        document.getElementById('leaderboard-content').innerHTML = `
+          <div class="space-y-3">
+            ${lb.map((entry, i) => `
+              <div class="flex items-center gap-4 rounded-lg border border-border bg-surface p-4">
+                <span class="text-2xl font-bold text-text-muted w-8 text-right">#${i + 1}</span>
+                <div class="flex-1">
+                  <a href="/u?id=${entry.userId}" class="font-semibold text-text hover:text-primary">${esc(entry.userId.slice(0, 8))}</a>
+                  <div class="text-sm text-text-muted">${entry.sourceCount} source${entry.sourceCount !== 1 ? 's' : ''} · ${entry.maxAvgScore}/10 best avg · ${entry.maxUserCount} max users</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `
+      } catch (e) {
+        document.getElementById('leaderboard-content').innerHTML = `<p class="text-text-muted">Error: ${e.message}</p>`
+      }
+    }
+
+    function esc(s) {
+      const d = document.createElement('div')
+      d.textContent = s ?? ''
+      return d.innerHTML
+    }
+
+    loadLeaderboard()
+  </script>
+</Base>

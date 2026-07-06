@@ -3,27 +3,50 @@
 **Your personal news agent.** Connect your sources — Atlas tells you what changed, what it means for your stack, and what to do next.
 
 [![CI](https://github.com/pantha704/atlas/actions/workflows/ci.yml/badge.svg)](https://github.com/pantha704/atlas/actions/workflows/ci.yml)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](./LICENSE)
 
 ## Why
 
-Information overload is solved for the crowd (Hacker News, daily.dev, TLDR). It's unsolved for _you_ — the engineer who cares about a specific stack, a handful of repos, a few research areas. You don't need 30 stories a day. You need the 5 that matter to _your_ work, with a note on what changed and what to do about it.
+Information overload is solved for the crowd (HN, daily.dev, TLDR). It's unsolved for _you_ — the engineer who cares about a specific stack, a handful of repos, a few research areas. You need 5 stories that matter to _your_ work, not 30 that matter to everyone's.
 
 Atlas is a personal news agent, not a feed. It scores every item against _your_ profile, reasons about impact on _your_ stack, and compounds — the more you use it, the sharper it gets.
 
 ## How it works
 
-1. **Connect sources** — GitHub repos, arXiv categories, RSS feeds, HN, Reddit, Telegram channels.
-2. **Atlas fetches daily** — deduplicates across sources, scores 0–10 against your profile.
+```
+┌─────────────┐     ┌──────────────┐     ┌──────────────┐
+│   Sources    │────▶│   Fetcher    │────▶│   Dedup      │
+│  HN, RSS,   │     │  7 scrapers  │     │  URL + topic │
+│  GitHub...  │     └──────────────┘     └──────┬───────┘
+└─────────────┘                                  │
+                                                 ▼
+┌─────────────┐     ┌──────────────┐     ┌──────────────┐
+│  Dashboard  │◀────│  Summarizer  │◀────│  AI Scoring  │
+│  /email/    │     │  EN + ZH     │     │  per-user    │
+│  /rss/webhook│    └──────────────┘     │  Groq+Gemini │
+└─────────────┘                          └──────┬───────┘
+                                                │
+                                         ┌──────▼───────┐
+                                         │  Impact      │
+                                         │  Reasoning   │
+                                         │  "affects U?" │
+                                         └──────────────┘
+```
+
+1. **Connect sources** — GitHub repos, arXiv, RSS, HN, Reddit, Telegram, OSS Insight. Or browse the [source market](https://atlas.pages.dev/market).
+2. **Atlas fetches daily** — deduplicates across sources, scores 0-10 against your profile.
 3. **Impact reasoning** — for your top items, a reasoning model answers: does this affect your stack? what should you do?
 4. **Deliver** — web dashboard, email, RSS, or webhook. EN + 中文.
 
 ## Moat
 
-Per-user scoring + feedback loop. Every upvote/downvote/dismiss refines your profile. Items fetched once globally, scored per-user. No competitor can replicate _your_ profile.
+- **Your profile** — every upvote/downvote refines your scoring. Switching cost = lose your taste graph.
+- **Network effect** — every user's source additions flow into the public market. Aggregated judgments → collective quality signal.
+- **Unit economics** — items fetched once globally, scored per-user. Marginal cost per user ≈ $0 on free tiers.
 
 ## Stack
 
-Astro · Hono · Cloudflare Workers · Turso (libSQL) · Drizzle · Better-Auth · Groq + Gemini · Tailwind v4. Every service on a free tier.
+Astro · Hono · Cloudflare Workers · Turso (libSQL) · Drizzle · Groq + Gemini · Tailwind v4. Every service on a free tier.
 
 ## Quick start
 
@@ -31,23 +54,30 @@ Astro · Hono · Cloudflare Workers · Turso (libSQL) · Drizzle · Better-Auth 
 git clone https://github.com/pantha704/atlas.git
 cd atlas
 bun install
+cp .env.example .env  # fill in GROQ_API_KEY
 bun dev
 ```
 
-## Self-host
+## Self-host (15 min, $0)
 
 ```bash
 bun install
-cp .env.example .env  # fill in GROQ_API_KEY, GITHUB_CLIENT_ID, etc.
-bunx wrangler deploy
+cp .env.example .env  # fill in keys
+bun run build
+bunx wrangler deploy  # API → CF Workers
+# Deploy apps/web → CF Pages
 ```
 
-See [`docs/self-host`](https://atlas.pages.dev/docs/self-host).
+See [docs](https://atlas.pages.dev/docs) for full guide.
 
 ## Status
 
-v0.1 — in active development. See [ROADMAP](./ROADMAP.md).
+v1.0 — stable. 93 tests, typecheck green, lint clean. See [ROADMAP](./ROADMAP.md).
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md). By contributing, you agree to the [CLA](./CLA.md).
 
 ## License
 
-[AGPL-3.0-or-later](./LICENSE). Commercial SaaS use requires a license — see [CONTRIBUTING](./CONTRIBUTING.md) for CLA details.
+[AGPL-3.0-or-later](./LICENSE). Commercial SaaS use requires a license — see [CONTRIBUTING](./CONTRIBUTING.md).

@@ -11,6 +11,7 @@
     "test": "echo 'no tests yet'"
   },
   "dependencies": {
+    "@atlas/core": "workspace:*",
     "astro": "^5.1.0"
   },
   "devDependencies": {

@@ -65,6 +65,43 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? 'http://localhost:8787'
       <span id="save-status" class="ml-4 text-sm text-text-muted"></span>
     </form>
 
+    <!-- Delivery preferences — v0.4 -->
+    <div class="mt-12">
+      <h2 class="text-lg font-semibold text-text">Delivery</h2>
+      <p class="mt-1 text-sm text-text-muted">How should Atlas send your daily digest?</p>
+
+      <div class="mt-4 space-y-4">
+        <div class="flex items-center gap-3">
+          <input type="checkbox" id="pref-email" class="h-4 w-4 rounded border-border" />
+          <label for="pref-email" class="text-sm text-text">Email digest daily</label>
+        </div>
+        <div class="flex items-center gap-3">
+          <input type="checkbox" id="pref-rss" class="h-4 w-4 rounded border-border" />
+          <label for="pref-rss" class="text-sm text-text">RSS feed (public, token-protected)</label>
+        </div>
+        <div id="rss-link-container" class="hidden ml-7">
+          <code id="rss-link" class="text-xs text-text-muted break-all"></code>
+        </div>
+        <div>
+          <label for="pref-webhook" class="block text-sm text-text">Webhook URL (optional)</label>
+          <input
+            id="pref-webhook"
+            type="url"
+            class="mt-2 w-full rounded-lg border border-border bg-surface p-3 text-text placeholder:text-text-muted focus:border-primary focus:outline-none"
+            placeholder="https://hooks.slack.com/..."
+          />
+        </div>
+      </div>
+
+      <button
+        id="save-delivery"
+        class="mt-4 rounded-lg bg-primary px-6 py-3 font-semibold text-white hover:bg-primary-hover"
+      >
+        Save delivery
+      </button>
+      <span id="delivery-status" class="ml-4 text-sm text-text-muted"></span>
+    </div>
+
     <!-- Tag weights (learned from feedback) -->
     <div class="mt-12">
       <h2 class="text-lg font-semibold text-text">Topics you care about</h2>
@@ -134,5 +171,62 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? 'http://localhost:8787'
     })
 
     loadProfile()
+
+    // v0.4: Delivery preferences
+    let currentRssToken = null
+
+    async function loadDelivery() {
+      try {
+        const res = await fetch(`${apiUrl}/profile`, { credentials: 'include' })
+        if (!res.ok) return
+        const data = await res.json()
+        const prefs = data.profile.deliveryPrefs ?? {}
+        currentRssToken = data.profile.rssToken ?? null
+        document.getElementById('pref-email').checked = !!prefs.email
+        document.getElementById('pref-rss').checked = !!prefs.rss
+        document.getElementById('pref-webhook').value = prefs.webhookUrl ?? ''
+        if (currentRssToken && prefs.rss) showRssLink(currentRssToken)
+      } catch {}
+    }
+
+    function showRssLink(token) {
+      const container = document.getElementById('rss-link-container')
+      const link = document.getElementById('rss-link')
+      if (container && link) {
+        container.classList.remove('hidden')
+        link.textContent = `${apiUrl}/rss/${token}.xml`
+      }
+    }
+
+    document.getElementById('pref-rss')?.addEventListener('change', (e) => {
+      if (e.target.checked && currentRssToken) showRssLink(currentRssToken)
+      else document.getElementById('rss-link-container')?.classList.add('hidden')
+    })
+
+    document.getElementById('save-delivery')?.addEventListener('click', async () => {
+      const status = document.getElementById('delivery-status')
+      status.textContent = 'Saving...'
+      try {
+        const res = await fetch(`${apiUrl}/profile`, {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            deliveryPrefs: {
+              email: document.getElementById('pref-email').checked,
+              rss: document.getElementById('pref-rss').checked,
+              webhookUrl: document.getElementById('pref-webhook').value || undefined,
+            },
+          }),
+        })
+        if (!res.ok) throw new Error('Failed')
+        status.textContent = 'Saved!'
+        if (document.getElementById('pref-rss').checked && currentRssToken) showRssLink(currentRssToken)
+      } catch (err) {
+        status.textContent = `Error: ${err.message}`
+      }
+    })
+
+    loadDelivery()
   </script>
 </Base>

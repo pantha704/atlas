@@ -15,6 +15,41 @@
       "when": 1783246926683,
       "tag": "0001_greedy_norrin_radd",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1783315940435,
+      "tag": "0002_strong_hawkeye",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1783316762671,
+      "tag": "0003_known_next_avengers",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1783327366434,
+      "tag": "0004_quiet_apocalypse",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1783327730288,
+      "tag": "0005_superb_nick_fury",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1783328275296,
+      "tag": "0006_funny_jimmy_woo",
+      "breakpoints": true
     }
   ]
 }

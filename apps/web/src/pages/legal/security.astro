@@ -1,0 +1,31 @@
+---
+import Base from '../../layouts/Base.astro'
+---
+
+<Base title="Security — Atlas">
+  <main class="mx-auto max-w-3xl px-6 py-12">
+    <h1 class="text-3xl font-bold text-text">Security</h1>
+
+    <div class="mt-8 space-y-6 text-text leading-relaxed">
+      <section>
+        <h2 class="text-xl font-semibold text-text">Authentication</h2>
+        <p class="mt-2 text-text-muted">Atlas uses GitHub OAuth with httpOnly session cookies (HMAC-SHA256 JWT, 30-day expiry). Sessions are stored in the database and can be revoked. We never store passwords.</p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-semibold text-text">Data encryption</h2>
+        <p class="mt-2 text-text-muted">All data is transmitted over HTTPS. Session tokens are hashed before storage. API keys are stored as environment variables, never in code.</p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-semibold text-text">Infrastructure</h2>
+        <p class="mt-2 text-text-muted">Atlas runs on Cloudflare Workers (edge compute) with Turso (libSQL) for database. Both services provide built-in DDoS protection and encryption at rest.</p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-semibold text-text">Reporting vulnerabilities</h2>
+        <p class="mt-2 text-text-muted">Found a security issue? Please report it responsibly via <a href="https://github.com/pantha704/atlas/security/advisories">GitHub Security Advisories</a>. We will respond within 48 hours.</p>
+      </section>
+    </div>
+  </main>
+</Base>

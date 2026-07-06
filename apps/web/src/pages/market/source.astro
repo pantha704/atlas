@@ -1,0 +1,106 @@
+---
+import Base from '../../layouts/Base.astro'
+
+const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? 'http://localhost:8787'
+---
+
+<Base title="Source — Atlas">
+  <main class="mx-auto max-w-3xl px-6 py-12">
+    <a href="/market" class="text-sm text-text-muted hover:text-text">← Back to market</a>
+    <div id="source-content" class="mt-8">
+      <p class="text-text-muted">Loading source...</p>
+    </div>
+  </main>
+
+  <script is:inline define:vars={{ apiUrl: API_URL }}>
+    async function loadSource() {
+      const params = new URLSearchParams(location.search)
+      const id = params.get('id')
+      if (!id) {
+        document.getElementById('source-content').innerHTML = '<p class="text-text-muted">No source ID specified.</p>'
+        return
+      }
+      try {
+        const res = await fetch(`${apiUrl}/market/${id}`)
+        if (!res.ok) {
+          document.getElementById('source-content').innerHTML = '<p class="text-text-muted">Source not found.</p>'
+          return
+        }
+        const data = await res.json()
+        render(data.source)
+      } catch (e) {
+        document.getElementById('source-content').innerHTML = `<p class="text-text-muted">Failed to load: ${e.message}</p>`
+      }
+    }
+
+    function render(s) {
+      const tags = s.fieldTags ? s.fieldTags.split(',').map(t => `<code class="text-xs bg-surface-2 px-2 py-0.5 rounded">${esc(t.trim())}</code>`).join(' ') : ''
+      document.getElementById('source-content').innerHTML = `
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-mono px-2 py-0.5 rounded bg-surface-2 text-text-muted">${esc(s.type)}</span>
+          ${tags}
+        </div>
+        <h1 class="mt-4 text-3xl font-bold text-text">${esc(s.name)}</h1>
+        ${s.bio ? `<p class="mt-2 text-text-muted">${esc(s.bio)}</p>` : ''}
+        <div class="mt-6 rounded-lg border border-border bg-surface p-6">
+          <h2 class="text-lg font-semibold text-text">Metrics</h2>
+          <div class="mt-4 grid grid-cols-3 gap-4 text-center">
+            <div>
+              <div class="text-2xl font-bold text-primary">${s.userCount}</div>
+              <div class="text-sm text-text-muted">Users</div>
+            </div>
+            <div>
+              <div class="text-2xl font-bold text-primary">${s.avgScore}/10</div>
+              <div class="text-sm text-text-muted">Avg score</div>
+            </div>
+            <div>
+              <div class="text-2xl font-bold text-primary">${Math.round(s.snr * 100)}%</div>
+              <div class="text-sm text-text-muted">Signal</div>
+            </div>
+          </div>
+        </div>
+        <div class="mt-6 flex gap-4">
+          <button id="add-btn" class="rounded-lg bg-primary px-6 py-3 font-semibold text-white hover:bg-primary-hover">Add to my sources</button>
+          <span id="add-status" class="self-center text-sm text-text-muted"></span>
+        </div>
+      `
+
+      document.getElementById('add-btn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('add-btn')
+        const status = document.getElementById('add-status')
+        btn.disabled = true
+        status.textContent = 'Adding...'
+        try {
+          const res = await fetch(`${apiUrl}/market/${s.id}/add`, {
+            method: 'POST',
+            credentials: 'include',
+          })
+          if (res.status === 401) {
+            status.innerHTML = 'Please <a href="/signup" class="text-primary">sign in</a> first.'
+            btn.disabled = false
+            return
+          }
+          const data = await res.json()
+          if (res.ok) {
+            status.textContent = 'Added!'
+            btn.textContent = 'Added ✓'
+          } else {
+            status.textContent = data.error ?? 'Failed'
+            btn.disabled = false
+          }
+        } catch (e) {
+          status.textContent = `Error: ${e.message}`
+          btn.disabled = false
+        }
+      })
+    }
+
+    function esc(s) {
+      const d = document.createElement('div')
+      d.textContent = s ?? ''
+      return d.innerHTML
+    }
+
+    loadSource()
+  </script>
+</Base>

@@ -1,4 +1,5 @@
 export { createAIClient, type AIClient, type CompletionRequest } from './client'
 export { ContentAnalyzer, mergeTopicDuplicates } from './analyzer'
 export { DailySummarizer } from './summarizer'
+export { ImpactReasoner } from './reasoner'
 export * from './prompts'

@@ -11,3 +11,4 @@ crons = ["0 6 * * *"]
 # [vars] section for non-secret config; secrets via `wrangler secret put`
 [vars]
 TURSO_DATABASE_URL = "libsql://atlas-default.turso.io"
+APP_URL = "http://localhost:8787"

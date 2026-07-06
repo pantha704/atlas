@@ -209,3 +209,11 @@ export interface EnrichmentResult {
   communityDiscussionZh: string
   sources: string[]
 }
+
+// v0.3: impact reasoning — "does this affect YOUR stack? what should you do?"
+export interface ImpactResult {
+  affectsStack: boolean
+  affectedComponents: string[] // which of user's stack items are affected
+  action: string // what the user should do
+  confidence: 'low' | 'medium' | 'high'
+}

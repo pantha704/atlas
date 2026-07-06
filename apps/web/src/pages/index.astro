@@ -2,65 +2,128 @@
 import Base from '../layouts/Base.astro'
 ---
 
-<Base>
-  <main class="mx-auto max-w-3xl px-6 py-16">
-    <section class="text-center">
-      <p class="text-sm font-semibold uppercase tracking-wider text-primary">Atlas</p>
-      <h1 class="mt-4 text-4xl font-bold tracking-tight text-text">
-        Your personal news agent.
-      </h1>
-      <p class="mt-6 text-lg text-text-muted">
-        Connect your sources — GitHub, arXiv, RSS, HN, Reddit, Telegram. Atlas tells you what changed,
-        what it means for <em class="text-text not-italic font-medium">your stack</em>, and what to do next.
-      </p>
-      <div class="mt-10 flex items-center justify-center gap-4">
-        <a
-          href="/signup"
-          class="rounded-lg bg-primary px-6 py-3 text-base font-semibold text-white transition-colors hover:bg-primary-hover"
+<Base title="Atlas — Your personal news agent">
+  <!-- Hero -->
+  <section class="mx-auto max-w-4xl px-6 pt-24 pb-16 text-center">
+    <h1 class="text-5xl font-extrabold text-text leading-tight">
+      Your personal news agent.<br />
+      <span class="text-primary">Not a feed.</span>
+    </h1>
+    <p class="mt-6 text-lg text-text-muted max-w-2xl mx-auto">
+      Connect your sources. Atlas scores every item against <em>your</em> profile, reasons about
+      impact on <em>your</em> stack, and delivers daily. Free. Open source.
+    </p>
+    <div class="mt-8 flex justify-center gap-4">
+      <a
+        href="/signup"
+        class="rounded-lg bg-primary px-8 py-3 text-base font-semibold text-white hover:bg-primary-hover"
+        >Get started — GitHub OAuth</a
+      >
+      <a
+        href="/market"
+        class="rounded-lg border border-border bg-surface px-8 py-3 text-base font-medium text-text hover:border-primary"
+        >Browse sources</a
+      >
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section class="mx-auto max-w-4xl px-6 py-16">
+    <h2 class="text-2xl font-bold text-text text-center">How it works</h2>
+    <div class="mt-10 grid gap-8 md:grid-cols-3">
+      <div class="text-center">
+        <div
+          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-lg"
         >
-          Get started
-        </a>
-        <a href="/dashboard" class="text-base font-medium text-text-muted hover:text-text">
-          View public digest →
-        </a>
-      </div>
-    </section>
-
-    <section class="mt-24 grid gap-8 sm:grid-cols-3">
-      <div class="rounded-lg border border-border bg-surface p-6">
-        <h3 class="text-lg font-semibold text-text">Per-user scoring</h3>
+          1
+        </div>
+        <h3 class="font-semibold text-text">Connect sources</h3>
         <p class="mt-2 text-sm text-text-muted">
-          Every item scored against your profile, not the crowd. 5 items that matter to you beat 30 that don't.
+          HN, RSS, GitHub, arXiv, Reddit, Telegram, OSS Insight. Or browse the community market.
         </p>
       </div>
-      <div class="rounded-lg border border-border bg-surface p-6">
-        <h3 class="text-lg font-semibold text-text">Impact reasoning</h3>
+      <div class="text-center">
+        <div
+          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-lg"
+        >
+          2
+        </div>
+        <h3 class="font-semibold text-text">Atlas scores daily</h3>
         <p class="mt-2 text-sm text-text-muted">
-          A reasoning model answers: does this affect your stack? what should you do? confidence level?
+          AI scores every item 0-10 against your interests, stack, and feedback history. Threshold
+          filters noise.
         </p>
       </div>
-      <div class="rounded-lg border border-border bg-surface p-6">
-        <h3 class="text-lg font-semibold text-text">Compounds</h3>
+      <div class="text-center">
+        <div
+          class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-lg"
+        >
+          3
+        </div>
+        <h3 class="font-semibold text-text">Get impact reasoning</h3>
         <p class="mt-2 text-sm text-text-muted">
-          Feedback refines your profile. The more you use Atlas, the sharper it gets. No competitor can replicate you.
+          For your top items: does this affect your stack? What should you do? Confidence level.
         </p>
       </div>
-    </section>
+    </div>
+  </section>
 
-    <section class="mt-24 rounded-lg border border-border bg-surface-2 p-8">
-      <h2 class="text-2xl font-bold text-text">Why not Hacker News or daily.dev?</h2>
-      <p class="mt-4 text-text-muted">
-        They solve overload for the crowd. Atlas solves it for you. HN gives 30 stories for everyone;
-        Atlas gives you 5 for your work. daily.dev personalizes by click; Atlas personalizes by
-        impact on your actual stack.
-      </p>
-    </section>
-
-    <footer class="mt-24 border-t border-border pt-8 text-sm text-text-muted">
-      <div class="flex flex-wrap items-center justify-between gap-4">
-        <span>AGPL-3.0 · <a href="https://github.com/pantha704/atlas">GitHub</a></span>
-        <span>v0.1 — in active development</span>
+  <!-- Why Atlas -->
+  <section class="mx-auto max-w-4xl px-6 py-16">
+    <div class="rounded-lg border border-border bg-surface p-8">
+      <h2 class="text-2xl font-bold text-text">Why Atlas is different</h2>
+      <div class="mt-6 grid gap-6 md:grid-cols-2">
+        <div>
+          <h3 class="font-semibold text-text">Your profile, your moat</h3>
+          <p class="mt-2 text-sm text-text-muted">
+            Every upvote/downvote refines your scoring. No competitor can replicate your taste
+            graph.
+          </p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-text">Network effect</h3>
+          <p class="mt-2 text-sm text-text-muted">
+            Every user's source additions flow into the public market. Aggregated independent
+            judgments → collective quality signal.
+          </p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-text">Free forever</h3>
+          <p class="mt-2 text-sm text-text-muted">
+            Built on free tiers: Cloudflare Workers, Turso, Groq, Gemini. Self-host in 15 minutes.
+          </p>
+        </div>
+        <div>
+          <h3 class="font-semibold text-text">Open source</h3>
+          <p class="mt-2 text-sm text-text-muted">
+            AGPL-3.0. Full transparency. Contribute, improve, or fork and run your own.
+          </p>
+        </div>
       </div>
-    </footer>
-  </main>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="mx-auto max-w-4xl px-6 py-16 text-center">
+    <h2 class="text-3xl font-bold text-text">Stop scrolling. Start knowing.</h2>
+    <p class="mt-4 text-text-muted">Atlas is free. Sign up in 30 seconds with GitHub.</p>
+    <a
+      href="/signup"
+      class="mt-6 inline-block rounded-lg bg-primary px-8 py-3 text-base font-semibold text-white hover:bg-primary-hover"
+      >Get started</a
+    >
+  </section>
+
+  <!-- Footer -->
+  <footer class="mx-auto max-w-4xl px-6 py-12 border-t border-border">
+    <div class="flex flex-wrap justify-between gap-8 text-sm text-text-muted">
+      <div><span class="font-bold text-text">Atlas</span> — Your personal news agent.</div>
+      <div class="flex gap-6">
+        <a href="/dashboard" class="hover:text-text">Dashboard</a>
+        <a href="/market" class="hover:text-text">Market</a>
+        <a href="/docs" class="hover:text-text">Docs</a>
+        <a href="/legal/privacy" class="hover:text-text">Privacy</a>
+      </div>
+    </div>
+  </footer>
 </Base>

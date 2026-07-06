@@ -1,6 +1,14 @@
+# Atlas API — local dev vars. Copy to .dev.vars and fill in.
+# In production, use `wrangler secret put` for each.
+
 TURSO_DATABASE_URL=libsql://atlas-default.turso.io
 TURSO_AUTH_TOKEN=
 GROQ_API_KEY=
+GEMINI_API_KEY=
 GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
+GITHUB_TOKEN=
 BETTER_AUTH_SECRET=dev-only-change-in-prod
+APP_URL=http://localhost:8787
+RESEND_API_KEY=
+RESEND_FROM_EMAIL=Atlas <onboarding@resend.dev>

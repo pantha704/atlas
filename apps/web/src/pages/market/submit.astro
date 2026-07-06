@@ -1,0 +1,121 @@
+---
+import Base from '../../layouts/Base.astro'
+
+const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? 'http://localhost:8787'
+---
+
+<Base title="Submit Source — Atlas">
+  <main class="mx-auto max-w-2xl px-6 py-12">
+    <a href="/market" class="text-sm text-text-muted hover:text-text">← Back to market</a>
+    <h1 class="mt-8 text-3xl font-bold text-text">Submit a source</h1>
+    <p class="mt-2 text-text-muted">Share a source with the Atlas community. It'll appear in the market after quality check.</p>
+
+    <form id="submit-form" class="mt-8 space-y-6">
+      <div>
+        <label for="source-type" class="block text-sm font-medium text-text">Source type</label>
+        <select id="source-type" class="mt-2 w-full rounded-lg border border-border bg-surface p-3 text-text">
+          <option value="rss">RSS Feed</option>
+          <option value="hackernews">Hacker News</option>
+          <option value="github">GitHub (user events or repo releases)</option>
+          <option value="arxiv">arXiv</option>
+          <option value="reddit">Reddit</option>
+          <option value="telegram">Telegram</option>
+          <option value="ossinsight">OSS Insight</option>
+        </select>
+      </div>
+
+      <div>
+        <label for="source-name" class="block text-sm font-medium text-text">Name</label>
+        <input id="source-name" type="text" class="mt-2 w-full rounded-lg border border-border bg-surface p-3 text-text placeholder:text-text-muted focus:border-primary focus:outline-none" placeholder="e.g. Simon Willison's Blog" />
+      </div>
+
+      <div>
+        <label for="source-bio" class="block text-sm font-medium text-text">Description (optional)</label>
+        <textarea id="source-bio" rows="2" class="mt-2 w-full rounded-lg border border-border bg-surface p-3 text-text placeholder:text-text-muted focus:border-primary focus:outline-none" placeholder="One-line description of this source."></textarea>
+      </div>
+
+      <div>
+        <label for="source-tags" class="block text-sm font-medium text-text">Field tags (comma-separated, optional)</label>
+        <input id="source-tags" type="text" class="mt-2 w-full rounded-lg border border-border bg-surface p-3 text-text placeholder:text-text-muted focus:border-primary focus:outline-none" placeholder="ai, systems, rust" />
+      </div>
+
+      <!-- Dynamic config fields based on type -->
+      <div id="config-fields" class="space-y-4">
+        <div>
+          <label for="rss-url" class="block text-sm font-medium text-text">Feed URL</label>
+          <input id="rss-url" type="url" class="mt-2 w-full rounded-lg border border-border bg-surface p-3 text-text placeholder:text-text-muted focus:border-primary focus:outline-none" placeholder="https://example.com/feed.xml" />
+        </div>
+      </div>
+
+      <button type="submit" class="rounded-lg bg-primary px-6 py-3 font-semibold text-white hover:bg-primary-hover">Submit source</button>
+      <span id="submit-status" class="ml-4 text-sm text-text-muted"></span>
+    </form>
+  </main>
+
+  <script is:inline define:vars={{ apiUrl: API_URL }}>
+    const configTemplates = {
+      rss: `<div><label class="block text-sm font-medium text-text">Feed URL</label><input id="cfg-url" type="url" class="mt-2 w-full rounded-lg border border-border bg-surface p-3 text-text placeholder:text-text-muted" placeholder="https://example.com/feed.xml" /></div>`,
+      hackernews: `<div><label class="block text-sm font-medium text-text">Fetch top stories</label><input id="cfg-top" type="number" value="30" min="1" max="100" class="mt-2 w-32 rounded-lg border border-border bg-surface p-3 text-text" /><label class="ml-4 text-sm font-medium text-text">Min score</label><input id="cfg-min" type="number" value="100" min="0" class="mt-2 ml-2 w-32 rounded-lg border border-border bg-surface p-3 text-text" /></div>`,
+      github: `<div><label class="block text-sm font-medium text-text">Type</label><select id="cfg-gh-type" class="mt-2 w-full rounded-lg border border-border bg-surface p-3 text-text"><option value="user_events">User events</option><option value="repo_releases">Repo releases</option></select><div id="gh-fields" class="mt-2"><label class="block text-sm font-medium text-text">Username</label><input id="cfg-username" type="text" class="mt-2 w-full rounded-lg border border-border bg-surface p-3 text-text placeholder:text-text-muted" placeholder="karpathy" /></div></div>`,
+      arxiv: `<div><label class="block text-sm font-medium text-text">Categories (comma-separated)</label><input id="cfg-categories" type="text" value="cs.AI, cs.LG" class="mt-2 w-full rounded-lg border border-border bg-surface p-3 text-text" /></div>`,
+      reddit: `<div><label class="block text-sm font-medium text-text">Subreddits (comma-separated)</label><input id="cfg-subreddits" type="text" class="mt-2 w-full rounded-lg border border-border bg-surface p-3 text-text placeholder:text-text-muted" placeholder="MachineLearning, LocalLLaMA" /></div>`,
+      telegram: `<div><label class="block text-sm font-medium text-text">Channels (comma-separated, without @)</label><input id="cfg-channels" type="text" class="mt-2 w-full rounded-lg border border-border bg-surface p-3 text-text placeholder:text-text-muted" placeholder="ai_china" /></div>`,
+      ossinsight: `<div><label class="block text-sm font-medium text-text">Languages (comma-separated)</label><input id="cfg-languages" type="text" value="All, Python, TypeScript" class="mt-2 w-full rounded-lg border border-border bg-surface p-3 text-text" /></div>`,
+    }
+
+    function buildConfig(type) {
+      switch (type) {
+        case 'rss': return { name: document.getElementById('source-name').value, url: document.getElementById('cfg-url')?.value ?? '', enabled: true }
+        case 'hackernews': return { enabled: true, fetchTopStories: parseInt(document.getElementById('cfg-top')?.value ?? '30'), minScore: parseInt(document.getElementById('cfg-min')?.value ?? '100') }
+        case 'github': {
+          const ghType = document.getElementById('cfg-gh-type')?.value ?? 'user_events'
+          if (ghType === 'user_events') return { type: ghType, username: document.getElementById('cfg-username')?.value ?? '', enabled: true }
+          return { type: ghType, owner: document.getElementById('cfg-owner')?.value ?? '', repo: document.getElementById('cfg-repo')?.value ?? '', enabled: true }
+        }
+        case 'arxiv': return { enabled: true, categories: (document.getElementById('cfg-categories')?.value ?? '').split(',').map(s => ({ category: s.trim(), enabled: true })), maxResults: 30 }
+        case 'reddit': return { enabled: true, subreddits: (document.getElementById('cfg-subreddits')?.value ?? '').split(',').map(s => ({ subreddit: s.trim(), enabled: true, sort: 'hot', timeFilter: 'day', fetchLimit: 25, minScore: 10 })), users: [], fetchComments: 5 }
+        case 'telegram': return { enabled: true, channels: (document.getElementById('cfg-channels')?.value ?? '').split(',').map(s => ({ channel: s.trim(), enabled: true, fetchLimit: 20 })) }
+        case 'ossinsight': return { enabled: true, period: 'past_24_hours', languages: (document.getElementById('cfg-languages')?.value ?? 'All').split(',').map(s => s.trim()), keywords: [], minStars: 50, maxItems: 20 }
+        default: return {}
+      }
+    }
+
+    document.getElementById('source-type')?.addEventListener('change', (e) => {
+      document.getElementById('config-fields').innerHTML = configTemplates[e.target.value] ?? ''
+    })
+
+    document.getElementById('submit-form')?.addEventListener('submit', async (e) => {
+      e.preventDefault()
+      const status = document.getElementById('submit-status')
+      status.textContent = 'Submitting...'
+      try {
+        const type = document.getElementById('source-type').value
+        const res = await fetch(`${apiUrl}/market`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type,
+            name: document.getElementById('source-name').value,
+            bio: document.getElementById('source-bio').value || undefined,
+            fieldTags: document.getElementById('source-tags').value || undefined,
+            config: buildConfig(type),
+          }),
+        })
+        if (res.status === 401) {
+          status.innerHTML = 'Please <a href="/signup" class="text-primary">sign in</a> first.'
+          return
+        }
+        const data = await res.json()
+        if (res.ok) {
+          status.textContent = 'Submitted! Redirecting...'
+          setTimeout(() => location.href = `/market/source?id=${data.id}`, 1000)
+        } else {
+          status.textContent = `Failed: ${data.error}`
+        }
+      } catch (err) {
+        status.textContent = `Error: ${err.message}`
+      }
+    })
+  </script>
+</Base>

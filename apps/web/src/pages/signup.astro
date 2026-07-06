@@ -32,4 +32,13 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? 'http://localhost:8787'
       and <a href="/legal/terms" class="text-primary">Terms</a>. Atlas is AGPL-3.0 open source.
     </p>
   </main>
+
+  <script is:inline>
+    // v0.7: Store referral cookie if ?ref= param present
+    const params = new URLSearchParams(location.search)
+    const ref = params.get('ref')
+    if (ref) {
+      document.cookie = `atlas_ref=${ref}; Path=/; Max-Age=604800; SameSite=Lax`
+    }
+  </script>
 </Base>

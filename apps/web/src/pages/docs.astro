@@ -1,0 +1,81 @@
+---
+import Base from '../layouts/Base.astro'
+---
+
+<Base title="Docs — Atlas">
+  <main class="mx-auto max-w-3xl px-6 py-12">
+    <h1 class="text-3xl font-bold text-text">Documentation</h1>
+    <p class="mt-2 text-text-muted">Everything you need to run and contribute to Atlas.</p>
+
+    <div class="mt-8 space-y-8">
+      <section>
+        <h2 class="text-xl font-semibold text-text">Quick start</h2>
+        <div class="mt-4 rounded-lg border border-border bg-surface p-4 font-mono text-sm text-text">
+          <p>git clone https://github.com/pantha704/atlas.git</p>
+          <p>cd atlas</p>
+          <p>bun install</p>
+          <p>cp .env.example .env  # fill in GROQ_API_KEY</p>
+          <p>bun dev</p>
+        </div>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-semibold text-text">Environment variables</h2>
+        <div class="mt-4 space-y-2 text-sm text-text-muted">
+          <p><code class="font-mono bg-surface-2 px-1 rounded">GROQ_API_KEY</code> — Primary AI (free tier: 14k req/day)</p>
+          <p><code class="font-mono bg-surface-2 px-1 rounded">GEMINI_API_KEY</code> — AI fallback (free tier: 1.5k req/day)</p>
+          <p><code class="font-mono bg-surface-2 px-1 rounded">GITHUB_CLIENT_ID</code> / <code class="font-mono bg-surface-2 px-1 rounded">GITHUB_CLIENT_SECRET</code> — OAuth</p>
+          <p><code class="font-mono bg-surface-2 px-1 rounded">TURSO_DATABASE_URL</code> / <code class="font-mono bg-surface-2 px-1 rounded">TURSO_AUTH_TOKEN</code> — Database</p>
+          <p><code class="font-mono bg-surface-2 px-1 rounded">BETTER_AUTH_SECRET</code> — JWT signing (generate: <code class="font-mono">openssl rand -base64 32</code>)</p>
+          <p><code class="font-mono bg-surface-2 px-1 rounded">RESEND_API_KEY</code> — Email delivery (optional, free tier: 100/day)</p>
+        </div>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-semibold text-text">Self-host guide</h2>
+        <ol class="mt-4 space-y-4 text-sm text-text-muted list-decimal ml-4">
+          <li>
+            <strong class="text-text">Create a Turso database</strong> — sign up at <a href="https://turso.tech">turso.tech</a>, create a database, copy the URL and auth token.
+          </li>
+          <li>
+            <strong class="text-text">Create a GitHub OAuth app</strong> — go to <a href="https://github.com/settings/developers">github.com/settings/developers</a>, set callback URL to <code class="font-mono bg-surface-2 px-1 rounded">https://your-domain.com/api/auth/callback</code>.
+          </li>
+          <li>
+            <strong class="text-text">Get a Groq API key</strong> — sign up at <a href="https://console.groq.com">console.groq.com</a>, create an API key (free tier: 14k req/day).
+          </li>
+          <li>
+            <strong class="text-text">Deploy to Cloudflare Workers</strong> — install wrangler: <code class="font-mono bg-surface-2 px-1 rounded">bun add -g wrangler</code>, then <code class="font-mono bg-surface-2 px-1 rounded">wrangler deploy</code> in apps/api.
+          </li>
+          <li>
+            <strong class="text-text">Set environment variables</strong> — use <code class="font-mono bg-surface-2 px-1 rounded">wrangler secret put</code> for each secret.
+          </li>
+          <li>
+            <strong class="text-text">Run migrations</strong> — <code class="font-mono bg-surface-2 px-1 rounded">cd packages/db && bun run migrate</code>.
+          </li>
+          <li>
+            <strong class="text-text">Deploy web</strong> — deploy apps/web to Cloudflare Pages, set <code class="font-mono bg-surface-2 px-1 rounded">PUBLIC_ATLAS_API_URL</code> to your API Worker URL.
+          </li>
+        </ol>
+        <p class="mt-4 text-sm text-text-muted">Total time: ~15 minutes. Total cost: $0 (all free tiers).</p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-semibold text-text">Source configuration</h2>
+        <p class="mt-2 text-sm text-text-muted">See <a href="/market">Source Market</a> for pre-configured sources, or configure custom sources in your <a href="/sources">sources page</a>.</p>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-semibold text-text">API reference</h2>
+        <div class="mt-4 space-y-2 text-sm text-text-muted">
+          <p><code class="font-mono bg-surface-2 px-1 rounded">GET /health</code> — Health check</p>
+          <p><code class="font-mono bg-surface-2 px-1 rounded">GET /digest</code> — Public global digest</p>
+          <p><code class="font-mono bg-surface-2 px-1 rounded">POST /trigger</code> — Trigger global pipeline</p>
+          <p><code class="font-mono bg-surface-2 px-1 rounded">GET /my-digest</code> — Per-user digest (auth)</p>
+          <p><code class="font-mono bg-surface-2 px-1 rounded">GET /market</code> — Source market listing</p>
+          <p><code class="font-mono bg-surface-2 px-1 rounded">GET /rss/:token.xml</code> — Per-user RSS feed</p>
+          <p><code class="font-mono bg-surface-2 px-1 rounded">GET /share/:slug</code> — Shared digest</p>
+        </div>
+      </section>
+    </div>
+  </main>
+</Base>

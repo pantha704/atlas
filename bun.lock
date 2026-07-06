@@ -24,6 +24,7 @@
         "@cloudflare/workers-types": "^4.20250101.0",
         "@types/node": "^26.1.0",
         "typescript": "^5.7.0",
+        "vitest": "^4.1.9",
         "wrangler": "^4.0.0",
       },
     },
@@ -31,6 +32,7 @@
       "name": "@atlas/web",
       "version": "0.0.0",
       "dependencies": {
+        "@atlas/core": "workspace:*",
         "astro": "^5.1.0",
       },
       "devDependencies": {

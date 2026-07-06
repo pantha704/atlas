@@ -1,0 +1,1 @@
+ALTER TABLE `scores` ADD `impact_json` text;
