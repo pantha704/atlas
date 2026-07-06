@@ -49,7 +49,8 @@ import {
   users,
 } from '@atlas/db'
 import { and, desc, eq } from 'drizzle-orm'
-import { Hono } from 'hono'
+import { type Context, Hono } from 'hono'
+import { cors } from 'hono/cors'
 import { sendDigestEmail } from './email'
 import { handleRssFeed } from './rss'
 import { sendWebhook } from './webhook'
@@ -63,9 +64,22 @@ export interface Env extends AuthEnv {
   ATLAS_LAST_DIGEST?: string
   RESEND_API_KEY?: string
   RESEND_FROM_EMAIL?: string
+  WEB_URL?: string // Pages frontend URL for redirects
 }
 
 const app = new Hono<{ Bindings: Env }>()
+
+// CORS — allow Pages frontend to make authenticated requests
+app.use(
+  '*',
+  cors({
+    origin: (origin) => origin ?? '*',
+    allowHeaders: ['Content-Type', 'Authorization'],
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    credentials: true,
+    maxAge: 86400,
+  }),
+)
 
 // ponytail: DB created per-request — Turso handles pooling. Promote to per-worker init if latency shows.
 function getDB(env: Env) {
@@ -143,7 +157,11 @@ app.get('/auth/github', (c) => {
   return c.redirect(url)
 })
 
-app.get('/auth/callback', async (c) => {
+app.get('/auth/callback', handleAuthCallback)
+// ponytail: alias for backwards compat — OAuth app might have /api/ prefix
+app.get('/api/auth/callback', handleAuthCallback)
+
+async function handleAuthCallback(c: Context) {
   const code = c.req.query('code')
   const state = c.req.query('state')
   const cookieState = extractStateFromCookie(c.req.header('cookie'))
@@ -168,11 +186,7 @@ app.get('/auth/callback', async (c) => {
   // v0.7: Record referral if cookie present
   const refCookie = c.req.header('cookie')?.match(/atlas_ref=([^;]+)/)?.[1]
   if (refCookie && refCookie !== user.id) {
-    const existing = await db
-      .select()
-      .from(referrals)
-      .where(eq(referrals.referredId, user.id))
-      .limit(1)
+    const existing = await db.select().from(referrals).where(eq(referrals.referredId, user.id)).limit(1)
     if (existing.length === 0) {
       await db.insert(referrals).values({
         id: crypto.randomUUID(),
@@ -184,8 +198,10 @@ app.get('/auth/callback', async (c) => {
     c.header('Set-Cookie', 'atlas_ref=; Path=/; Max-Age=0; SameSite=Lax')
   }
 
-  return c.redirect('/dashboard')
-})
+  // Redirect to web frontend — same domain on Vercel, or WEB_URL for separate deploy
+  const webUrl = c.env.WEB_URL ?? ''
+  return c.redirect(`${webUrl}/dashboard`)
+}
 
 app.post('/auth/logout', async (c) => {
   const token = extractSessionToken(c.req.header('cookie'))
@@ -991,6 +1007,7 @@ async function upsertUserFromGithub(
   return { id, email, name, plan: 'free' }
 }
 
+export { app }
 export default {
   fetch: app.fetch,
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {

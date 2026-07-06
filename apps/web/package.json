@@ -11,6 +11,8 @@
     "test": "echo 'no tests yet'"
   },
   "dependencies": {
+    "@astrojs/vercel": "9.0.4",
+    "@atlas/api": "workspace:*",
     "@atlas/core": "workspace:*",
     "astro": "^5.1.0"
   },

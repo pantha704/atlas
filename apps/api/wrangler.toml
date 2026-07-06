@@ -13,3 +13,4 @@ crons = ["0 6 * * *"]
 TURSO_DATABASE_URL = "libsql://atlas-pantha704.aws-ap-south-1.turso.io"
 GITHUB_CLIENT_ID = "Ov23lig3t21oPhh2bCFd"
 APP_URL = "https://atlas-api.glm-panther.workers.dev"
+WEB_URL = "https://atlas-ah6.pages.dev"
