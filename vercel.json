@@ -1,6 +1,0 @@
-{
-  "buildCommand": "cd apps/web && bunx astro build",
-  "outputDirectory": "apps/web/dist",
-  "installCommand": "bun install",
-  "framework": null
-}
