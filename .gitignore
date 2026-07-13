@@ -9,13 +9,11 @@ dist
 *.log
 .DS_Store
 coverage
-.turbo
 .vercel
 .claude/
 AGENTS.md
 CLAUDE.md
-bundle-api
-api/_bundle.mjs
-api/_bundle.mjs
-api/
-bundle-api.mjs
+/bundle-api
+/api/_bundle.mjs
+/bundle-api.mjs
+.env*
