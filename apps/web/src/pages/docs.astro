@@ -44,16 +44,16 @@ import Base from '../layouts/Base.astro'
             <strong class="text-text">Get a Groq API key</strong> — sign up at <a href="https://console.groq.com">console.groq.com</a>, create an API key (free tier: 14k req/day).
           </li>
           <li>
-            <strong class="text-text">Deploy to Cloudflare Workers</strong> — install wrangler: <code class="font-mono bg-surface-2 px-1 rounded">bun add -g wrangler</code>, then <code class="font-mono bg-surface-2 px-1 rounded">wrangler deploy</code> in apps/api.
+            <strong class="text-text">Deploy to Vercel</strong> — import the repo, set Root Directory to <code class="font-mono bg-surface-2 px-1 rounded">apps/web</code>, framework auto-detects Astro.
           </li>
           <li>
-            <strong class="text-text">Set environment variables</strong> — use <code class="font-mono bg-surface-2 px-1 rounded">wrangler secret put</code> for each secret.
+            <strong class="text-text">Set environment variables</strong> — in Vercel project settings, add all secrets from <code class="font-mono bg-surface-2 px-1 rounded">.env.example</code> for Production.
           </li>
           <li>
             <strong class="text-text">Run migrations</strong> — <code class="font-mono bg-surface-2 px-1 rounded">cd packages/db && bun run migrate</code>.
           </li>
           <li>
-            <strong class="text-text">Deploy web</strong> — deploy apps/web to Cloudflare Pages, set <code class="font-mono bg-surface-2 px-1 rounded">PUBLIC_ATLAS_API_URL</code> to your API Worker URL.
+            <strong class="text-text">Deploy web</strong> — same Vercel project serves both the Astro frontend and the API catch-all at <code class="font-mono bg-surface-2 px-1 rounded">/api/*</code>.
           </li>
         </ol>
         <p class="mt-4 text-sm text-text-muted">Total time: ~15 minutes. Total cost: $0 (all free tiers).</p>
