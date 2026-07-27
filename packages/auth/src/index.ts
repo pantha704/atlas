@@ -232,7 +232,28 @@ export async function requireAuth(
 ): Promise<SessionUser | null> {
   const token = extractSessionToken(request.headers.get('cookie'))
   if (!token) return null
-  return verifySessionToken(token, env.BETTER_AUTH_SECRET)
+  const session = await verifySessionToken(token, env.BETTER_AUTH_SECRET)
+  if (!session) return null
+  // Refresh plan from DB (Stripe upgrade / trial expiry) — JWT plan can be stale
+  const rows = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      name: users.name,
+      plan: users.plan,
+      trialEndsAt: users.trialEndsAt,
+    })
+    .from(users)
+    .where(eq(users.id, session.id))
+    .limit(1)
+  const u = rows[0]
+  if (!u) return null
+  let plan = u.plan as 'free' | 'pro'
+  if (plan === 'pro' && u.trialEndsAt && new Date(u.trialEndsAt) < new Date()) {
+    await db.update(users).set({ plan: 'free', trialEndsAt: null }).where(eq(users.id, u.id))
+    plan = 'free'
+  }
+  return { id: u.id, email: u.email, name: u.name, plan }
 }
 
 // ===== Helpers =====

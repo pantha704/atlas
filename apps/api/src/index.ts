@@ -23,13 +23,19 @@ import {
   DailySummarizer,
   ImpactReasoner,
   PerUserAnalyzer,
+  type Plan,
   type UserProfile,
   applyFeedbackToProfile,
+  canAddSource,
+  canUseDelivery,
   createAIClient,
   defaultProfile,
+  demoItems,
   fetchAllSources,
+  impactTopN,
   mergeCrossSourceDuplicates,
   mergeTopicDuplicates,
+  sourceLimitMessage,
 } from '@atlas/core'
 import {
   contributions,
@@ -48,10 +54,19 @@ import {
   teams,
   users,
 } from '@atlas/db'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, count, desc, eq } from 'drizzle-orm'
 import { type Context, Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { billingConfigured, createCheckoutSession, verifyStripeWebhook } from './billing'
 import { sendDigestEmail } from './email'
+import { reportError, track } from './observability'
+import {
+  loadRecentItems,
+  loadUserScoreMap,
+  mergeFetchedWithStored,
+  storeGlobalItems,
+  upsertUserScore,
+} from './pipeline'
 import { handleRssFeed } from './rss'
 import { sendWebhook } from './webhook'
 
@@ -65,6 +80,17 @@ export interface Env extends AuthEnv {
   RESEND_API_KEY?: string
   RESEND_FROM_EMAIL?: string
   WEB_URL?: string // Pages frontend URL for redirects
+  // Billing (optional until Stripe configured)
+  STRIPE_SECRET_KEY?: string
+  STRIPE_PRICE_ID?: string
+  STRIPE_WEBHOOK_SECRET?: string
+  // Vercel cron / external schedulers
+  CRON_SECRET?: string
+  DEMO_MODE?: string
+  // Observability (optional)
+  POSTHOG_KEY?: string
+  POSTHOG_HOST?: string
+  SENTRY_DSN?: string
 }
 
 const app = new Hono<{ Bindings: Env }>()
@@ -81,6 +107,13 @@ app.use(
   }),
 )
 
+// Sentry on unhandled route errors (no-op without SENTRY_DSN)
+app.onError((err, c) => {
+  console.error('atlas unhandled', err)
+  reportError(c.env, err, { path: c.req.path })
+  return c.json({ error: 'internal error' }, 500)
+})
+
 // ponytail: DB created per-request — Turso handles pooling. Promote to per-worker init if latency shows.
 function getDB(env: Env) {
   return createDB({ url: env.TURSO_DATABASE_URL, authToken: env.TURSO_AUTH_TOKEN }).db
@@ -89,8 +122,39 @@ function getDB(env: Env) {
 // ===== Public routes =====
 
 app.get('/health', (c) =>
-  c.json({ ok: true, name: 'atlas-api', version: '0.1.0', time: new Date().toISOString() }),
+  c.json({
+    ok: true,
+    name: 'atlas-api',
+    version: '0.5.0',
+    time: new Date().toISOString(),
+    demo: c.env.DEMO_MODE === 'true',
+    billing: billingConfigured(c.env),
+  }),
 )
+
+// Demo digest — no auth, seeded data for pitch / empty-state
+app.get('/demo/digest', (c) => {
+  if (c.env.DEMO_MODE !== 'true' && c.req.query('force') !== '1') {
+    // Always allow demo payload for marketing; DEMO_MODE just marks production demo site
+  }
+  const seeded = demoItems()
+  const today = new Date().toISOString().slice(0, 10)
+  const summarizer = new DailySummarizer()
+  return summarizer.generateSummary(seeded, today, seeded.length, 'en').then((markdown) =>
+    c.json({
+      markdown,
+      items: seeded.map((i) => ({
+        id: i.id,
+        title: i.title,
+        score: i.aiScore,
+        reason: i.aiReason,
+        tags: i.aiTags,
+        url: i.url,
+      })),
+      demo: true,
+    }),
+  )
+})
 
 app.get('/rss/:token.xml', async (c) => {
   const token = c.req.param('token') as string
@@ -132,20 +196,30 @@ app.get('/digest', (c) => {
 })
 
 app.post('/trigger', async (c) => {
-  if (!c.env.GROQ_API_KEY) return c.json({ error: 'GROQ_API_KEY not configured' }, 500)
-  const config: Config = { ...DEFAULT_CONFIG, ai: buildAIConfig(c.env) }
-  const aiClient = createAIClient(config.ai)
-  const { Orchestrator } = await import('@atlas/core')
-  const orchestrator = new Orchestrator(config, aiClient)
-  try {
-    const result = await orchestrator.run()
-    const enDigest = result.digests.find((d) => d.lang === 'en')
-    if (enDigest) c.env.ATLAS_LAST_DIGEST = enDigest.markdown
-    return c.json({ ok: true, items: result.items.length, log: result.log })
-  } catch (err) {
-    return c.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, 500)
-  }
+  return runGlobalFetch(c.env).then((result) => {
+    if (!result.ok) return c.json(result, 500)
+    return c.json(result)
+  })
 })
+
+// Vercel Cron / external schedulers — Authorization: Bearer $CRON_SECRET
+// Vercel Cron uses GET; external tools may POST.
+async function handleCronFetch(c: Context<{ Bindings: Env }>) {
+  const secret = c.env.CRON_SECRET
+  if (secret) {
+    const auth = c.req.header('authorization') ?? ''
+    // Vercel also sends `x-vercel-cron: 1` on scheduled runs
+    const isVercelCron = c.req.header('x-vercel-cron') === '1'
+    if (!isVercelCron && auth !== `Bearer ${secret}`) {
+      return c.json({ error: 'unauthorized' }, 401)
+    }
+  }
+  const result = await runGlobalFetch(c.env)
+  if (!result.ok) return c.json(result, 500)
+  return c.json(result)
+}
+app.get('/cron/fetch', handleCronFetch)
+app.post('/cron/fetch', handleCronFetch)
 
 // ===== Auth routes =====
 
@@ -176,6 +250,8 @@ async function handleAuthCallback(c: Context) {
   if (!email) return c.json({ error: 'no verified email on GitHub account' }, 400)
 
   const db = getDB(c.env)
+  const prior = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1)
+  const isNew = prior.length === 0
   const user = await upsertUserFromGithub(db, ghUser, email)
   const jwt = await createSessionToken(user, c.env.BETTER_AUTH_SECRET)
   await createDbSession(db, user.id, jwt)
@@ -194,9 +270,15 @@ async function handleAuthCallback(c: Context) {
         referredId: user.id,
         reward: '1mo_pro',
       })
+      track(c.env, 'referral_recorded', user.id, { referrerId: refCookie })
     }
     c.header('Set-Cookie', 'atlas_ref=; Path=/; Max-Age=0; SameSite=Lax')
   }
+
+  track(c.env, isNew ? 'user_signed_up' : 'user_signed_in', user.id, {
+    plan: user.plan,
+    provider: 'github',
+  })
 
   // Redirect to web frontend — same domain on Vercel, or WEB_URL for separate deploy
   const webUrl = c.env.WEB_URL ?? ''
@@ -246,6 +328,16 @@ app.post('/sources', async (c) => {
   if (!validTypes.includes(body.type)) return c.json({ error: 'invalid source type' }, 400)
 
   const db = getDB(c.env)
+  const plan = user.plan as Plan
+  const existing = await db
+    .select({ n: count() })
+    .from(sources)
+    .where(eq(sources.userId, user.id))
+  const sourceCount = existing[0]?.n ?? 0
+  if (!canAddSource(plan, sourceCount)) {
+    return c.json({ error: sourceLimitMessage(plan), code: 'source_limit', limit: 10 }, 403)
+  }
+
   const id = crypto.randomUUID()
   await db.insert(sources).values({
     id,
@@ -321,7 +413,16 @@ app.put('/profile', async (c) => {
   const body = (await c.req.json()) as Partial<UserProfile> & { deliveryPrefs?: DeliveryPrefs }
   const db = getDB(c.env)
   const existing = await db.select().from(profiles).where(eq(profiles.userId, user.id)).limit(1)
-  const tagWeights = body.tagWeights ?? {}
+  const plan = user.plan as Plan
+  // Free plan: strip pro-only delivery channels (email/rss/webhook)
+  let deliveryPrefs = body.deliveryPrefs
+  if (deliveryPrefs && plan === 'free') {
+    deliveryPrefs = {
+      email: false,
+      rss: false,
+      webhookUrl: undefined,
+    }
+  }
   const values = {
     userId: user.id,
     interests: body.interests ?? existing[0]?.interests ?? '',
@@ -329,8 +430,8 @@ app.put('/profile', async (c) => {
     embedding: existing[0]?.embedding ?? null,
     updatedAt: new Date().toISOString(),
     rssToken: existing[0]?.rssToken ?? crypto.randomUUID(),
-    deliveryPrefs: body.deliveryPrefs
-      ? JSON.stringify(body.deliveryPrefs)
+    deliveryPrefs: deliveryPrefs
+      ? JSON.stringify(deliveryPrefs)
       : (existing[0]?.deliveryPrefs ?? null),
   }
   if (existing.length > 0) {
@@ -359,6 +460,10 @@ app.post('/feedback', async (c) => {
     userId: user.id,
     itemId: body.itemId,
     signal: body.signal,
+  })
+  track(c.env, 'feedback_submitted', user.id, {
+    signal: body.signal,
+    itemId: body.itemId,
   })
 
   // Update profile tag weights — fetch item tags from scores table
@@ -403,17 +508,35 @@ app.post('/feedback', async (c) => {
 })
 
 // ===== Per-user digest (auth required) =====
+// Flow: load global items + user fetch → reuse cached scores → score only missing → impact top-N
 
 app.get('/my-digest', async (c) => {
   const user = await requireAuth(c.req.raw, c.env, getDB(c.env))
   if (!user) return c.json({ error: 'unauthorized' }, 401)
   const db = getDB(c.env)
+  const plan = user.plan as Plan
+  const force = c.req.query('force') === '1'
+  const today = new Date().toISOString().slice(0, 10)
 
-  // Fetch user's enabled sources
+  // Serve cached same-day digest unless force=1
+  if (!force) {
+    const cached = await db
+      .select()
+      .from(digests)
+      .where(and(eq(digests.userId, user.id), eq(digests.date, today)))
+      .limit(1)
+    if (cached[0]?.renderedMd) {
+      return c.json({
+        markdown: cached[0].renderedMd,
+        itemCounts: { cached: true },
+        digestId: cached[0].id,
+      })
+    }
+  }
+
   const userSources = await db.select().from(sources).where(eq(sources.userId, user.id))
   const profileRow = await db.select().from(profiles).where(eq(profiles.userId, user.id)).limit(1)
 
-  // Build per-user config from user's sources + default config as base
   const config: Config = {
     ...DEFAULT_CONFIG,
     ai: buildAIConfig(c.env),
@@ -434,71 +557,105 @@ app.get('/my-digest', async (c) => {
 
   const aiClient = createAIClient(config.ai)
   const since = new Date(Date.now() - config.filtering.timeWindowHours * 3600 * 1000)
+  const sinceIso = since.toISOString()
 
-  // Fetch + dedup
-  const allItems = await fetchAllSources(config, since)
-  const merged = mergeCrossSourceDuplicates(allItems)
+  // 1. Global items already fetched by cron + live fetch for user-specific sources
+  const stored = await loadRecentItems(db, sinceIso)
+  const live = await fetchAllSources(config, since)
+  const merged = mergeFetchedWithStored(live, stored)
 
-  // Per-user scoring (the moat)
-  const analyzer = new PerUserAnalyzer(aiClient, profile, {
-    concurrency: config.ai.analysisConcurrency,
-    throttleSec: config.ai.throttleSec,
-    reasonModel: config.ai.reasonModel,
-  })
-  const analyzed = await analyzer.analyzeBatch(merged)
+  // 2. Persist any new live items globally
+  const idMap = await storeGlobalItems(db, merged)
 
-  // Filter by per-user threshold
+  // 3. Load cached scores — only AI-score missing items
+  const scoreMap = await loadUserScoreMap(db, user.id, merged.map((i) => i.id))
+  const toScore: ContentItem[] = []
+  const already: ContentItem[] = []
+  for (const item of merged) {
+    const cachedScore = scoreMap.get(item.id)
+    if (cachedScore) {
+      already.push({
+        ...item,
+        aiScore: cachedScore.score,
+        aiReason: cachedScore.reason,
+        aiTags: cachedScore.tags ? (JSON.parse(cachedScore.tags) as string[]) : [],
+      })
+    } else {
+      toScore.push(item)
+    }
+  }
+
+  let newlyScored: ContentItem[] = []
+  if (toScore.length > 0) {
+    const analyzer = new PerUserAnalyzer(aiClient, profile, {
+      concurrency: config.ai.analysisConcurrency,
+      throttleSec: config.ai.throttleSec,
+      reasonModel: config.ai.reasonModel,
+    })
+    newlyScored = await analyzer.analyzeBatch(toScore)
+    for (const item of newlyScored) {
+      let dbItemId = idMap.get(item.id)
+      if (!dbItemId) {
+        const rows = await db
+          .select({ id: items.id })
+          .from(items)
+          .where(eq(items.externalId, item.id))
+          .limit(1)
+        dbItemId = rows[0]?.id
+      }
+      if (!dbItemId || item.aiScore === null) continue
+      await upsertUserScore(db, {
+        dbItemId,
+        userId: user.id,
+        score: Math.round(item.aiScore),
+        reason: item.aiReason ?? '',
+        tags: item.aiTags,
+      })
+    }
+  }
+
+  const analyzed = [...already, ...newlyScored]
   const important = analyzed
     .filter((item) => item.aiScore !== null && item.aiScore >= profile.threshold)
     .sort((a, b) => (b.aiScore ?? 0) - (a.aiScore ?? 0))
 
-  // Topic dedup
   const deduped = await mergeTopicDuplicates(aiClient, important)
 
-  // v0.3: Impact reasoning on top-3 items — "does this affect YOUR stack?"
+  // 4. Impact reasoning — top-N by plan; skip items that already have impact cached
+  const topN = impactTopN(plan)
+  const needImpact = deduped.slice(0, topN).filter((item) => {
+    const s = scoreMap.get(item.id)
+    return !s?.impact
+  })
   const reasoner = new ImpactReasoner(aiClient, { reasonModel: config.ai.reasonModel })
-  const impacts = await reasoner.reasonBatch(deduped, profile, 3)
+  const impacts = needImpact.length
+    ? await reasoner.reasonBatch(needImpact, profile, topN)
+    : new Map()
 
-  // Save scores to DB (with impact for top-3)
-  for (const item of deduped) {
-    const scoreId = crypto.randomUUID()
-    const itemId = crypto.randomUUID()
-    // Upsert item
-    await db
-      .insert(items)
-      .values({
-        id: itemId,
-        externalId: item.id,
-        url: item.url,
-        title: item.title,
-        author: item.author,
-        publishedAt: item.publishedAt,
-      })
-      .onConflictDoNothing()
-    // Save per-user score + impact (if available)
+  for (const item of deduped.slice(0, topN)) {
     const impact = impacts.get(item.id)
-    await db.insert(scores).values({
-      id: scoreId,
-      itemId,
+    if (!impact) continue
+    const dbItemId = idMap.get(item.id) ?? scoreMap.get(item.id)?.dbItemId
+    if (!dbItemId) continue
+    await upsertUserScore(db, {
+      dbItemId,
       userId: user.id,
       score: Math.round(item.aiScore ?? 0),
       reason: item.aiReason ?? '',
-      tags: JSON.stringify(item.aiTags),
-      impact: impact ? JSON.stringify(impact) : null,
+      tags: item.aiTags,
+      impact,
     })
   }
 
-  // Generate per-user digest
+  // 5. Render + save digest
   const summarizer = new DailySummarizer()
-  const today = new Date().toISOString().slice(0, 10)
   const markdown = await summarizer.generateSummary(
     deduped,
     today,
-    allItems.length,
+    merged.length,
     profile.language,
   )
 
-  // Save digest to DB
   const digestId = crypto.randomUUID()
   await db.insert(digests).values({
     id: digestId,
@@ -508,12 +665,12 @@ app.get('/my-digest', async (c) => {
     renderedMd: markdown,
   })
 
-  // v0.4: Delivery — email + webhook
+  // 6. Delivery — pro only for email/webhook (free = web dashboard)
   const deliveryPrefs = parseDeliveryPrefs(profileRow[0]?.deliveryPrefs)
-  const siteUrl = (c.env.APP_URL ?? 'https://atlas.pages.dev') as string
+  const siteUrl = (c.env.WEB_URL ?? c.env.APP_URL ?? 'https://atlas.pages.dev') as string
   const subject = `Atlas — Your Daily Digest (${today})`
 
-  if (deliveryPrefs.email && user.email) {
+  if (deliveryPrefs.email && user.email && canUseDelivery(plan, 'email')) {
     const emailResult = await sendDigestEmail(user.email, subject, markdown, c.env)
     await db.insert(deliveries).values({
       id: crypto.randomUUID(),
@@ -524,7 +681,7 @@ app.get('/my-digest', async (c) => {
     })
   }
 
-  if (deliveryPrefs.webhookUrl) {
+  if (deliveryPrefs.webhookUrl && canUseDelivery(plan, 'webhook')) {
     const webhookResult = await sendWebhook(deliveryPrefs.webhookUrl, {
       event: 'digest_ready',
       digestUrl: `${siteUrl}/share/${digestId}`,
@@ -541,7 +698,26 @@ app.get('/my-digest', async (c) => {
     })
   }
 
-  return c.json({ markdown, itemCounts: { fetched: allItems.length, scored: deduped.length } })
+  track(c.env, 'digest_ready', user.id, {
+    digestId,
+    plan,
+    itemCount: deduped.length,
+    newlyScored: newlyScored.length,
+    fromCache: already.length,
+    forced: force,
+  })
+
+  return c.json({
+    markdown,
+    digestId,
+    itemCounts: {
+      fetched: merged.length,
+      fromCache: already.length,
+      newlyScored: newlyScored.length,
+      scored: deduped.length,
+    },
+    plan,
+  })
 })
 
 // ===== Item detail (auth required) — v0.3 =====
@@ -667,6 +843,10 @@ app.post('/market/:id/add', async (c) => {
   const existing = await db.select().from(sources).where(eq(sources.userId, user.id))
   const isDup = existing.some((s) => s.type === pub.type && s.config === pub.configJson)
   if (isDup) return c.json({ error: 'already added' }, 409)
+  const plan = user.plan as Plan
+  if (!canAddSource(plan, existing.length)) {
+    return c.json({ error: sourceLimitMessage(plan), code: 'source_limit' }, 403)
+  }
 
   const id = crypto.randomUUID()
   await db.insert(sources).values({
@@ -801,18 +981,68 @@ app.get('/badges/:userId', async (c) => {
   return c.json({ badges })
 })
 
-// ===== Billing (v0.6) — ponytail: stub routes, wire Stripe when ready =====
+// ===== Billing (Stripe Checkout) =====
 
 app.post('/billing/checkout', async (c) => {
   const user = await requireAuth(c.req.raw, c.env, getDB(c.env))
   if (!user) return c.json({ error: 'unauthorized' }, 401)
-  // ponytail: Stripe checkout requires STRIPE_SECRET_KEY + price ID. Return 501 until configured.
-  return c.json({ error: 'billing not configured — set STRIPE_SECRET_KEY', status: 501 }, 501)
+  if (!billingConfigured(c.env)) {
+    return c.json(
+      { error: 'billing not configured — set STRIPE_SECRET_KEY and STRIPE_PRICE_ID' },
+      501,
+    )
+  }
+  const db = getDB(c.env)
+  const rows = await db.select().from(users).where(eq(users.id, user.id)).limit(1)
+  const row = rows[0]
+  const result = await createCheckoutSession(c.env, {
+    customerId: row?.stripeCustomerId ?? null,
+    customerEmail: user.email,
+    userId: user.id,
+  })
+  if ('error' in result) {
+    const status = result.status === 501 ? 501 : 502
+    return c.json({ error: result.error }, status)
+  }
+  return c.json({ ok: true, url: result.url, sessionId: result.sessionId })
 })
 
 app.post('/billing/webhook', async (c) => {
-  // ponytail: Stripe webhook signature verification. Stub until Stripe account set up.
-  return c.json({ error: 'billing not configured' }, 501)
+  const rawBody = await c.req.text()
+  const sig = c.req.header('stripe-signature') ?? null
+  const verified = await verifyStripeWebhook(c.env, rawBody, sig)
+  if (!verified.ok) return c.json({ error: verified.error }, 400)
+
+  const event = verified.event
+  const db = getDB(c.env)
+
+  if (event.type === 'checkout.session.completed') {
+    const obj = event.data.object
+    const userId = obj.client_reference_id ?? obj.metadata?.user_id
+    if (userId) {
+      const updates: { plan: 'pro'; stripeCustomerId?: string } = { plan: 'pro' }
+      if (obj.customer) updates.stripeCustomerId = obj.customer
+      await db.update(users).set(updates).where(eq(users.id, userId))
+      track(c.env, 'plan_upgraded', userId, { plan: 'pro', source: 'stripe' })
+    }
+  }
+
+  if (
+    event.type === 'customer.subscription.deleted' ||
+    (event.type === 'customer.subscription.updated' &&
+      event.data.object.status &&
+      ['canceled', 'unpaid', 'incomplete_expired'].includes(event.data.object.status))
+  ) {
+    const customerId = event.data.object.customer
+    if (customerId) {
+      await db
+        .update(users)
+        .set({ plan: 'free' })
+        .where(eq(users.stripeCustomerId, customerId))
+    }
+  }
+
+  return c.json({ received: true })
 })
 
 // ===== Share digest (v0.6) =====
@@ -869,8 +1099,27 @@ app.post('/referral', async (c) => {
     referrerId: body.referrerId,
     referredId: user.id,
     reward: '1mo_pro',
+    status: 'pending',
   })
-  return c.json({ ok: true })
+
+  // 3 successful referrals → 1 month pro trial for referrer
+  const pending = await db
+    .select()
+    .from(referrals)
+    .where(and(eq(referrals.referrerId, body.referrerId), eq(referrals.status, 'pending')))
+  if (pending.length >= 3) {
+    const trialEnd = new Date()
+    trialEnd.setMonth(trialEnd.getMonth() + 1)
+    await db
+      .update(users)
+      .set({ plan: 'pro', trialEndsAt: trialEnd.toISOString() })
+      .where(eq(users.id, body.referrerId))
+    for (const r of pending.slice(0, 3)) {
+      await db.update(referrals).set({ status: 'credited' }).where(eq(referrals.id, r.id))
+    }
+  }
+
+  return c.json({ ok: true, referralsTowardReward: Math.min(pending.length, 3) })
 })
 
 app.all('*', (c) => c.json({ error: 'not found' }, 404))
@@ -999,6 +1248,11 @@ async function upsertUserFromGithub(
   if (existing.length > 0) {
     const u = existing[0]
     if (!u) throw new Error('user fetch failed')
+    // Expire trial if past trialEndsAt
+    if (u.plan === 'pro' && u.trialEndsAt && new Date(u.trialEndsAt) < new Date()) {
+      await db.update(users).set({ plan: 'free', trialEndsAt: null }).where(eq(users.id, u.id))
+      return { id: u.id, email: u.email, name: u.name, plan: 'free' }
+    }
     return { id: u.id, email: u.email, name: u.name, plan: u.plan as 'free' | 'pro' }
   }
   const id = crypto.randomUUID()
@@ -1007,30 +1261,59 @@ async function upsertUserFromGithub(
   return { id, email, name, plan: 'free' }
 }
 
+/** Global fetch once: store raw items + public digest. Per-user scoring is on-demand. */
+async function runGlobalFetch(env: Env): Promise<{
+  ok: boolean
+  items?: number
+  stored?: number
+  log?: unknown
+  error?: string
+  status?: number
+}> {
+  if (!env.GROQ_API_KEY) {
+    return { ok: false, error: 'GROQ_API_KEY not configured', status: 500 }
+  }
+  const config: Config = { ...DEFAULT_CONFIG, ai: buildAIConfig(env) }
+  const aiClient = createAIClient(config.ai)
+  const { Orchestrator } = await import('@atlas/core')
+  const orchestrator = new Orchestrator(config, aiClient)
+  try {
+    const result = await orchestrator.run()
+    const enDigest = result.digests.find((d) => d.lang === 'en')
+    if (enDigest) env.ATLAS_LAST_DIGEST = enDigest.markdown
+
+    // Store all fetched (pre-filter) items globally for per-user scoring later
+    // Orchestrator returns filtered items; re-fetch raw window for storage is heavy —
+    // store the scored global set at minimum.
+    const db = getDB(env)
+    const idMap = await storeGlobalItems(db, result.items)
+
+    return {
+      ok: true,
+      items: result.items.length,
+      stored: idMap.size,
+      log: result.log,
+    }
+  } catch (err) {
+    reportError(env, err, { path: '/cron/fetch', extra: { stage: 'runGlobalFetch' } })
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+      status: 500,
+    }
+  }
+}
+
 export { app }
 export default {
   fetch: app.fetch,
   async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
     console.log('atlas scheduled tick', { time: new Date().toISOString() })
-    if (!env.GROQ_API_KEY) {
-      console.warn('GROQ_API_KEY missing — skipping pipeline')
-      return
-    }
-    const config: Config = { ...DEFAULT_CONFIG, ai: buildAIConfig(env) }
-    const aiClient = createAIClient(config.ai)
-    const { Orchestrator } = await import('@atlas/core')
-    const orchestrator = new Orchestrator(config, aiClient)
     ctx.waitUntil(
-      (async () => {
-        try {
-          const result = await orchestrator.run()
-          const enDigest = result.digests.find((d) => d.lang === 'en')
-          if (enDigest) env.ATLAS_LAST_DIGEST = enDigest.markdown
-          console.log('atlas pipeline complete', result.log)
-        } catch (err) {
-          console.error('atlas pipeline failed', err)
-        }
-      })(),
+      runGlobalFetch(env).then((r) => {
+        if (r.ok) console.log('atlas pipeline complete', r.log)
+        else console.error('atlas pipeline failed', r.error)
+      }),
     )
   },
 }

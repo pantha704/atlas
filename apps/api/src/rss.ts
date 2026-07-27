@@ -1,9 +1,9 @@
 // RSS feed — per-user, token-authenticated. ponytail: generate on-demand, no KV cache.
 // Fetches recent digests from DB, renders as RSS 2.0 XML.
 
-import { renderDigestMarkdown } from '@atlas/core'
+import { canUseDelivery, renderDigestMarkdown } from '@atlas/core'
 import type { DB } from '@atlas/db'
-import { digests, profiles } from '@atlas/db'
+import { digests, profiles, users } from '@atlas/db'
 import { desc, eq } from 'drizzle-orm'
 
 export async function handleRssFeed(token: string, db: DB, siteUrl: string): Promise<Response> {
@@ -14,6 +14,16 @@ export async function handleRssFeed(token: string, db: DB, siteUrl: string): Pro
     .limit(1)
   const profile = rows[0]
   if (!profile) return new Response('Not found', { status: 404 })
+
+  const userRows = await db
+    .select({ plan: users.plan })
+    .from(users)
+    .where(eq(users.id, profile.userId))
+    .limit(1)
+  const plan = (userRows[0]?.plan ?? 'free') as 'free' | 'pro'
+  if (!canUseDelivery(plan, 'rss')) {
+    return new Response('RSS is a Pro feature', { status: 403 })
+  }
 
   const prefs = parsePrefs(profile.deliveryPrefs)
   if (!prefs.rss) return new Response('RSS not enabled', { status: 403 })

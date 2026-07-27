@@ -1,6 +1,8 @@
 import type { APIRoute } from 'astro'
 import { app } from '@atlas/api'
 
+export const prerender = false
+
 export const ALL: APIRoute = async ({ request }) => {
   const url = new URL(request.url)
   // strip /api prefix so Hono routes match (e.g. /api/health -> /health)
@@ -13,5 +15,5 @@ export const ALL: APIRoute = async ({ request }) => {
     duplex: 'half',
   } as RequestInit)
   // inject process.env as Hono bindings (Vercel uses process.env, not CF Workers c.env)
-  return app.fetch(newReq, process.env as any)
+  return app.fetch(newReq, process.env as Record<string, string>)
 }

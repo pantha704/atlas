@@ -13,7 +13,10 @@ coverage
 .claude/
 AGENTS.md
 CLAUDE.md
+# Root-only deploy stubs (not apps/api package)
 /bundle-api
+/api/
 /api/_bundle.mjs
 /bundle-api.mjs
 .env*
+!.env.example

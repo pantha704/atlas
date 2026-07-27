@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 
 // ===== Atlas schema v0.1 =====
 // Per-user scoring is the moat: items fetched globally, scored per user.
@@ -14,6 +14,9 @@ export const users = sqliteTable('users', {
     .default('free'),
   // ponytail: prefs_json as text — promote to JSON column if we add postgres later
   prefs: text('prefs_json'),
+  // v0.6 billing
+  stripeCustomerId: text('stripe_customer_id'),
+  trialEndsAt: text('trial_ends_at'),
   createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
 })
 
@@ -40,33 +43,47 @@ export const sources = sqliteTable('sources', {
   createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
 })
 
-export const items = sqliteTable('items', {
-  id: text('id').primaryKey(),
-  sourceId: text('source_id').references(() => sources.id, { onDelete: 'cascade' }),
-  externalId: text('external_id').notNull(),
-  url: text('url').notNull(),
-  title: text('title').notNull(),
-  author: text('author'),
-  publishedAt: text('published_at').notNull(),
-  raw: text('raw'),
-  fetchedAt: text('fetched_at').notNull().default(sql`CURRENT_TIMESTAMP`),
-})
+export const items = sqliteTable(
+  'items',
+  {
+    id: text('id').primaryKey(),
+    sourceId: text('source_id').references(() => sources.id, { onDelete: 'cascade' }),
+    externalId: text('external_id').notNull(),
+    url: text('url').notNull(),
+    title: text('title').notNull(),
+    author: text('author'),
+    publishedAt: text('published_at').notNull(),
+    raw: text('raw'),
+    fetchedAt: text('fetched_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (t) => ({
+    // Global item identity — fetch once, score many users
+    externalIdUnq: uniqueIndex('items_external_id_unique').on(t.externalId),
+  }),
+)
 
-export const scores = sqliteTable('scores', {
-  id: text('id').primaryKey(),
-  itemId: text('item_id')
-    .notNull()
-    .references(() => items.id, { onDelete: 'cascade' }),
-  userId: text('user_id')
-    .notNull()
-    .references(() => users.id, { onDelete: 'cascade' }),
-  score: integer('score').notNull(),
-  reason: text('reason').notNull(),
-  tags: text('tags_json'),
-  // v0.3: impact reasoning result (nullable — only set for top-N items per user)
-  impact: text('impact_json'),
-  createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
-})
+export const scores = sqliteTable(
+  'scores',
+  {
+    id: text('id').primaryKey(),
+    itemId: text('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    score: integer('score').notNull(),
+    reason: text('reason').notNull(),
+    tags: text('tags_json'),
+    // v0.3: impact reasoning result (nullable — only set for top-N items per user)
+    impact: text('impact_json'),
+    createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (t) => ({
+    // Never re-score the same item for the same user
+    itemUserUnq: uniqueIndex('scores_item_user_unique').on(t.itemId, t.userId),
+  }),
+)
 
 export const feedback = sqliteTable('feedback', {
   id: text('id').primaryKey(),
