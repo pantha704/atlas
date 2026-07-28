@@ -1,21 +1,19 @@
 ---
-import Base from '../layouts/Base.astro'
+import AppShell from '../layouts/AppShell.astro'
 
 // Onboarding — 3 steps: persona → preset sources → add custom
-// ponytail: single page with JS step transitions, no router needed for 3 steps
 const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
 ---
 
-<Base title="Onboarding — Atlas">
-  <main class="mx-auto max-w-2xl px-6 py-12">
-    <h1 class="text-3xl font-bold text-text">Set up your digest</h1>
-    <p class="mt-2 text-text-muted">Three steps. About 2 minutes.</p>
+<AppShell title="Onboarding — Atlas" description="Set up your personal digest" width="md">
+    <h1 class="text-2xl font-medium tracking-tight text-text sm:text-3xl">Set up your digest</h1>
+    <p class="mt-2 text-sm text-text-muted">Three steps · about 2 minutes</p>
 
     <!-- Progress indicator -->
-    <div class="mt-8 flex items-center gap-2">
-      <div id="step-dot-1" class="h-2 w-8 rounded-full bg-primary"></div>
-      <div id="step-dot-2" class="h-2 w-8 rounded-full bg-border"></div>
-      <div id="step-dot-3" class="h-2 w-8 rounded-full bg-border"></div>
+    <div class="mt-8 flex items-center gap-2" role="progressbar" aria-valuemin="1" aria-valuemax="3" aria-valuenow="1" id="step-progress" aria-label="Onboarding progress">
+      <div id="step-dot-1" class="h-1.5 w-10 rounded-full bg-primary"></div>
+      <div id="step-dot-2" class="h-1.5 w-10 rounded-full bg-border"></div>
+      <div id="step-dot-3" class="h-1.5 w-10 rounded-full bg-border"></div>
     </div>
 
     <!-- Step 1: Persona -->
@@ -24,22 +22,22 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
       <p class="mt-2 text-sm text-text-muted">This tells Atlas how to score items for you.</p>
 
       <div class="mt-6 grid gap-3 sm:grid-cols-2">
-        <label class="cursor-pointer rounded-lg border border-border bg-surface p-4 hover:border-primary">
+        <label class="persona-card cursor-pointer rounded-md border border-border bg-surface p-4 transition-colors hover:border-primary/50 has-[:checked]:border-primary has-[:checked]:bg-primary/5">
           <input type="radio" name="persona" value="ml" class="sr-only" />
           <div class="font-medium text-text">AI/ML Researcher</div>
           <div class="mt-1 text-sm text-text-muted">Papers, models, training, inference</div>
         </label>
-        <label class="cursor-pointer rounded-lg border border-border bg-surface p-4 hover:border-primary">
+        <label class="persona-card cursor-pointer rounded-md border border-border bg-surface p-4 transition-colors hover:border-primary/50 has-[:checked]:border-primary has-[:checked]:bg-primary/5">
           <input type="radio" name="persona" value="systems" class="sr-only" />
           <div class="font-medium text-text">Systems Engineer</div>
           <div class="mt-1 text-sm text-text-muted">Distributed systems, Rust, Go, k8s</div>
         </label>
-        <label class="cursor-pointer rounded-lg border border-border bg-surface p-4 hover:border-primary">
+        <label class="persona-card cursor-pointer rounded-md border border-border bg-surface p-4 transition-colors hover:border-primary/50 has-[:checked]:border-primary has-[:checked]:bg-primary/5">
           <input type="radio" name="persona" value="frontend" class="sr-only" />
           <div class="font-medium text-text">Frontend Developer</div>
           <div class="mt-1 text-sm text-text-muted">React, Vue, CSS, web standards</div>
         </label>
-        <label class="cursor-pointer rounded-lg border border-border bg-surface p-4 hover:border-primary">
+        <label class="persona-card cursor-pointer rounded-md border border-border bg-surface p-4 transition-colors hover:border-primary/50 has-[:checked]:border-primary has-[:checked]:bg-primary/5">
           <input type="radio" name="persona" value="devops" class="sr-only" />
           <div class="font-medium text-text">DevOps / SRE</div>
           <div class="mt-1 text-sm text-text-muted">CI/CD, observability, cloud, security</div>
@@ -70,7 +68,7 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
         />
       </div>
 
-      <button id="next-1" class="mt-8 rounded-lg bg-primary px-6 py-3 font-semibold text-white hover:bg-primary-hover">
+      <button id="next-1" class="mt-8 h-10 rounded-md bg-primary px-5 text-sm font-medium text-white hover:bg-primary-hover">
         Next →
       </button>
     </section>
@@ -81,42 +79,42 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
       <p class="mt-2 text-sm text-text-muted">Atlas will fetch from these daily and score against your profile.</p>
 
       <div id="preset-sources" class="mt-6 space-y-3">
-        <label class="flex items-center gap-3 rounded-lg border border-border bg-surface p-4 cursor-pointer hover:border-primary">
+        <label class="flex items-center gap-3 rounded-md border border-border bg-surface p-4 cursor-pointer transition-colors hover:border-primary/50 has-[:checked]:border-primary/40">
           <input type="checkbox" data-source="hackernews" checked class="h-4 w-4 rounded border-border" />
           <div>
             <div class="font-medium text-text">Hacker News</div>
             <div class="text-sm text-text-muted">Top 30 stories, min 150 points, with comments</div>
           </div>
         </label>
-        <label class="flex items-center gap-3 rounded-lg border border-border bg-surface p-4 cursor-pointer hover:border-primary">
+        <label class="flex items-center gap-3 rounded-md border border-border bg-surface p-4 cursor-pointer transition-colors hover:border-primary/50 has-[:checked]:border-primary/40">
           <input type="checkbox" data-source="arxiv-ai" checked class="h-4 w-4 rounded border-border" />
           <div>
             <div class="font-medium text-text">arXiv: cs.AI, cs.LG</div>
             <div class="text-sm text-text-muted">AI/ML research papers, sorted by submission date</div>
           </div>
         </label>
-        <label class="flex items-center gap-3 rounded-lg border border-border bg-surface p-4 cursor-pointer hover:border-primary">
+        <label class="flex items-center gap-3 rounded-md border border-border bg-surface p-4 cursor-pointer transition-colors hover:border-primary/50 has-[:checked]:border-primary/40">
           <input type="checkbox" data-source="arxiv-cl" class="h-4 w-4 rounded border-border" />
           <div>
             <div class="font-medium text-text">arXiv: cs.CL, stat.ML</div>
             <div class="text-sm text-text-muted">NLP + statistical ML papers</div>
           </div>
         </label>
-        <label class="flex items-center gap-3 rounded-lg border border-border bg-surface p-4 cursor-pointer hover:border-primary">
+        <label class="flex items-center gap-3 rounded-md border border-border bg-surface p-4 cursor-pointer transition-colors hover:border-primary/50 has-[:checked]:border-primary/40">
           <input type="checkbox" data-source="reddit-ml" checked class="h-4 w-4 rounded border-border" />
           <div>
             <div class="font-medium text-text">Reddit: r/MachineLearning, r/LocalLLaMA</div>
             <div class="text-sm text-text-muted">ML community discussions, top comments</div>
           </div>
         </label>
-        <label class="flex items-center gap-3 rounded-lg border border-border bg-surface p-4 cursor-pointer hover:border-primary">
+        <label class="flex items-center gap-3 rounded-md border border-border bg-surface p-4 cursor-pointer transition-colors hover:border-primary/50 has-[:checked]:border-primary/40">
           <input type="checkbox" data-source="github-releases" checked class="h-4 w-4 rounded border-border" />
           <div>
             <div class="font-medium text-text">GitHub: vLLM, SGLang, Triton releases</div>
             <div class="text-sm text-text-muted">Inference engine releases, auto-tracked</div>
           </div>
         </label>
-        <label class="flex items-center gap-3 rounded-lg border border-border bg-surface p-4 cursor-pointer hover:border-primary">
+        <label class="flex items-center gap-3 rounded-md border border-border bg-surface p-4 cursor-pointer transition-colors hover:border-primary/50 has-[:checked]:border-primary/40">
           <input type="checkbox" data-source="ossinsight" checked class="h-4 w-4 rounded border-border" />
           <div>
             <div class="font-medium text-text">OSS Insight Trending</div>
@@ -126,10 +124,10 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
       </div>
 
       <div class="mt-8 flex gap-4">
-        <button id="back-2" class="rounded-lg border border-border bg-surface px-6 py-3 font-medium text-text hover:border-primary">
+        <button id="back-2" class="h-10 rounded-md border border-border bg-surface px-5 text-sm font-medium text-text hover:border-primary/50">
           ← Back
         </button>
-        <button id="next-2" class="rounded-lg bg-primary px-6 py-3 font-semibold text-white hover:bg-primary-hover">
+        <button id="next-2" class="h-10 rounded-md bg-primary px-5 text-sm font-medium text-white hover:bg-primary-hover">
           Next →
         </button>
       </div>
@@ -145,14 +143,14 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
           <label for="rss-url" class="block text-sm font-medium text-text">RSS feed URL</label>
           <div class="mt-2 flex gap-2">
             <input id="rss-url" type="url" placeholder="https://blog.example.com/feed.xml" class="flex-1 rounded-lg border border-border bg-surface p-3 text-text placeholder:text-text-muted focus:border-primary focus:outline-none" />
-            <button id="add-rss" class="rounded-lg border border-border bg-surface px-4 py-3 text-sm font-medium text-text hover:border-primary">Add</button>
+            <button id="add-rss" class="h-10 rounded-md border border-border bg-surface px-4 text-sm font-medium text-text hover:border-primary/50">Add</button>
           </div>
         </div>
         <div>
           <label for="gh-repo" class="block text-sm font-medium text-text">GitHub repo (owner/repo)</label>
           <div class="mt-2 flex gap-2">
             <input id="gh-repo" type="text" placeholder="openai/codex" class="flex-1 rounded-lg border border-border bg-surface p-3 text-text placeholder:text-text-muted focus:border-primary focus:outline-none" />
-            <button id="add-repo" class="rounded-lg border border-border bg-surface px-4 py-3 text-sm font-medium text-text hover:border-primary">Add</button>
+            <button id="add-repo" class="h-10 rounded-md border border-border bg-surface px-4 text-sm font-medium text-text hover:border-primary/50">Add</button>
           </div>
         </div>
       </div>
@@ -160,17 +158,16 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
       <div id="added-sources" class="mt-6 space-y-2"></div>
 
       <div class="mt-8 flex gap-4">
-        <button id="back-3" class="rounded-lg border border-border bg-surface px-6 py-3 font-medium text-text hover:border-primary">
+        <button id="back-3" class="h-10 rounded-md border border-border bg-surface px-5 text-sm font-medium text-text hover:border-primary/50">
           ← Back
         </button>
-        <button id="finish" class="rounded-lg bg-primary px-6 py-3 font-semibold text-white hover:bg-primary-hover">
+        <button id="finish" class="h-10 rounded-md bg-primary px-5 text-sm font-medium text-white hover:bg-primary-hover">
           Finish — generate my digest
         </button>
       </div>
 
-      <p id="finish-status" class="mt-4 text-sm text-text-muted"></p>
+      <p id="finish-status" class="mt-4 text-sm text-text-muted" aria-live="polite"></p>
     </section>
-  </main>
 
   <script is:inline define:vars={{ apiUrl: API_URL }}>
     const personaMap = {
@@ -322,12 +319,14 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
         const el = document.getElementById(`step-${i}`)
         const dot = document.getElementById(`step-dot-${i}`)
         if (el) el.classList.toggle('hidden', i !== n)
-        if (dot) dot.className = `h-2 w-8 rounded-full ${i <= n ? 'bg-primary' : 'bg-border'}`
+        if (dot) dot.className = `h-1.5 w-10 rounded-full ${i <= n ? 'bg-primary' : 'bg-border'}`
       }
+      const bar = document.getElementById('step-progress')
+      if (bar) bar.setAttribute('aria-valuenow', String(n))
     }
 
     // Make renderCustomSources global for inline onclick
     window.renderCustomSources = renderCustomSources
     window.customSources = customSources
   </script>
-</Base>
+</AppShell>

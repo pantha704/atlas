@@ -1,16 +1,14 @@
 ---
-import Base from '../../layouts/Base.astro'
+import AppShell from '../../layouts/AppShell.astro'
 
 const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
 ---
 
-<Base title="Source — Atlas">
-  <main class="mx-auto max-w-3xl px-6 py-12">
+<AppShell title="Source — Atlas" description="Market source detail" width="md">
     <a href="/market" class="text-sm text-text-muted hover:text-text">← Back to market</a>
     <div id="source-content" class="mt-8">
       <p class="text-text-muted">Loading source...</p>
     </div>
-  </main>
 
   <script is:inline define:vars={{ apiUrl: API_URL }}>
     async function loadSource() {
@@ -103,4 +101,4 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
 
     loadSource()
   </script>
-</Base>
+</AppShell>

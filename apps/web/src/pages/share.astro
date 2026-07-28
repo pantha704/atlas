@@ -1,62 +1,82 @@
 ---
-import Base from '../layouts/Base.astro'
+import AppShell from '../layouts/AppShell.astro'
 
 const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
 ---
 
-<Base title="Shared Digest — Atlas">
-  <main class="mx-auto max-w-3xl px-6 py-12">
-    <div id="share-content">
-      <p class="text-text-muted">Loading shared digest...</p>
-    </div>
-  </main>
+<AppShell title="Shared Digest — Atlas" description="Shared Atlas digest" width="md">
+  <div id="share-content" aria-live="polite">
+    <div class="atlas-skeleton h-8 w-64" aria-hidden="true"></div>
+    <div class="atlas-skeleton mt-6 h-48 w-full" aria-hidden="true"></div>
+    <p class="sr-only">Loading shared digest…</p>
+  </div>
 
   <script is:inline define:vars={{ apiUrl: API_URL }}>
     async function loadShare() {
+      const el = document.getElementById('share-content')
       const params = new URLSearchParams(location.search)
       const slug = params.get('id') ?? location.pathname.split('/share/')[1]
       if (!slug) {
-        document.getElementById('share-content').innerHTML = '<p class="text-text-muted">No share ID.</p>'
+        el.innerHTML = '<div class="atlas-banner" data-tone="warn">No share ID.</div>'
         return
       }
       try {
         const res = await fetch(`${apiUrl}/share/${slug}`)
         if (!res.ok) {
-          document.getElementById('share-content').innerHTML = '<p class="text-text-muted">Share not found.</p>'
+          el.innerHTML = '<div class="atlas-banner" data-tone="warn">Share not found.</div>'
           return
         }
         const data = await res.json()
         if (!data.digest) {
-          document.getElementById('share-content').innerHTML = '<p class="text-text-muted">Digest not available.</p>'
+          el.innerHTML = '<div class="atlas-banner" data-tone="info">Digest not available.</div>'
           return
         }
-        document.getElementById('share-content').innerHTML = `
-          <h1 class="text-3xl font-bold text-text">Atlas Daily — ${data.digest.date}</h1>
-          <p class="mt-2 text-sm text-text-muted">Shared digest · <a href="/signup" class="text-primary">Get your own personalized version</a></p>
-          <div class="mt-8 prose-atlas">${renderMd(data.digest.markdown)}</div>
-          <div class="mt-12 rounded-lg border border-border bg-surface p-6 text-center">
-            <p class="text-text font-semibold">Powered by Atlas</p>
-            <p class="mt-2 text-sm text-text-muted">Your personal news agent. Free. Open source.</p>
-            <a href="/signup" class="mt-4 inline-block rounded-lg bg-primary px-6 py-2 text-sm font-semibold text-white hover:bg-primary-hover">Get started</a>
+        el.innerHTML = `
+          <h1 class="text-2xl font-medium tracking-tight text-text sm:text-3xl">Atlas Daily — ${esc(data.digest.date)}</h1>
+          <p class="mt-2 text-sm text-text-muted">Shared digest · <a href="/signup" class="text-primary">Get your personalized version</a></p>
+          <div class="atlas-card mt-8 overflow-hidden p-6 sm:p-8">
+            <article class="prose-atlas max-w-none">${renderMd(data.digest.markdown)}</article>
+          </div>
+          <div class="atlas-card mt-10 p-6 text-center">
+            <p class="text-sm font-medium text-text">Powered by Atlas</p>
+            <p class="mt-1 text-sm text-text-muted">Your personal news agent. Free. Open source.</p>
+            <a href="/signup" class="mt-4 inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-white no-underline hover:bg-primary-hover">Get started</a>
           </div>
         `
       } catch (e) {
-        document.getElementById('share-content').innerHTML = `<p class="text-text-muted">Error: ${e.message}</p>`
+        el.innerHTML = `<div class="atlas-banner" data-tone="warn">Error: ${esc(e.message)}</div>`
       }
     }
 
     function renderMd(md) {
-      let html = md.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      let html = String(md ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
       html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>')
-      html = html.replace(/^## \[([^\]]+)\]\(([^)]+)\) ⭐️ (\d+(?:\.\d+)?)\/10/gm, '<h2><a href="$2">$1</a> <span class="score-badge" data-tier="$3 >= 9 ? \'high\' : $3 >= 7 ? \'good\' : $3 >= 5 ? \'mid\' : \'low\'">$3/10</span></h2>')
+      html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>')
       html = html.replace(/^---$/gm, '<hr />')
       html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
       html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
       html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
-      html = html.split('\n\n').map(b => b.trim() ? `<p>${b.replace(/\n/g, '<br />')}</p>` : '').join('\n')
+      // paragraphs: leave block tags alone
       return html
+        .split(/\n\n+/)
+        .map((b) => {
+          const t = b.trim()
+          if (!t) return ''
+          if (/^<(h[12]|hr)/.test(t)) return t
+          return `<p>${t.replace(/\n/g, '<br />')}</p>`
+        })
+        .join('\n')
+    }
+
+    function esc(s) {
+      const d = document.createElement('div')
+      d.textContent = s ?? ''
+      return d.innerHTML
     }
 
     loadShare()
   </script>
-</Base>
+</AppShell>

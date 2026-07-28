@@ -1,11 +1,10 @@
 ---
-import Base from '../../layouts/Base.astro'
+import AppShell from '../../layouts/AppShell.astro'
 
 const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
 ---
 
-<Base title="Submit Source — Atlas">
-  <main class="mx-auto max-w-2xl px-6 py-12">
+<AppShell title="Submit Source — Atlas" description="Share a source with the community" width="md">
     <a href="/market" class="text-sm text-text-muted hover:text-text">← Back to market</a>
     <h1 class="mt-8 text-3xl font-bold text-text">Submit a source</h1>
     <p class="mt-2 text-text-muted">Share a source with the Atlas community. It'll appear in the market after quality check.</p>
@@ -50,7 +49,6 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
       <button type="submit" class="rounded-lg bg-primary px-6 py-3 font-semibold text-white hover:bg-primary-hover">Submit source</button>
       <span id="submit-status" class="ml-4 text-sm text-text-muted"></span>
     </form>
-  </main>
 
   <script is:inline define:vars={{ apiUrl: API_URL }}>
     const configTemplates = {
@@ -118,4 +116,4 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
       }
     })
   </script>
-</Base>
+</AppShell>

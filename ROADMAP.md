@@ -13,7 +13,7 @@
 | Billing | ✅ Stripe Checkout + webhook (needs keys) |
 | Source market | ✅ thin (list/submit/add) |
 | Teams / badges / leaderboard | ⚠️ API-level; UX thin |
-| UI polish (shell + kit) | ✅ AppShell, UI kit, digest polish (no React yet) |
+| UI polish (shell + kit) | ✅ shell, kit, landing, digest, sources, profile, market, item |
 | PostHog / Sentry wired | ✅ server-side (env optional) |
 | Globe / geo map | ❌ **none** (not in product) |
 
@@ -70,7 +70,9 @@
 - Stripe ✅ (configure keys)
 - PostHog + Sentry wiring ✅ (signup/digest/feedback + onError; no-op without keys)
 - App shell + UI kit + dashboard polish ✅
-- Lighthouse / a11y pass ⚠️ started (skip link, focus rings, live regions)
+- Landing + pricing + product mock ✅
+- Item feedback UI + onboarding/signup/share polish ✅
+- Lighthouse / a11y pass ⚠️ skip link, focus rings, live regions, progressbar
 - React islands + shadcn ❌ (not required for density)
 
 ## v0.7 — Growth (partial)

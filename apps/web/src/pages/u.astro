@@ -1,47 +1,56 @@
 ---
-import Base from '../layouts/Base.astro'
+import AppShell from '../layouts/AppShell.astro'
 
 const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
 ---
 
-<Base title="User — Atlas">
-  <main class="mx-auto max-w-3xl px-6 py-12">
-    <div id="profile-content">
-      <p class="text-text-muted">Loading profile...</p>
-    </div>
-  </main>
+<AppShell title="User — Atlas" description="Public contributor profile">
+  <div id="profile-content" aria-live="polite">
+    <div class="atlas-skeleton h-10 w-48" aria-hidden="true"></div>
+    <div class="atlas-skeleton mt-6 h-28 w-full" aria-hidden="true"></div>
+    <p class="sr-only">Loading profile…</p>
+  </div>
 
   <script is:inline define:vars={{ apiUrl: API_URL }}>
     async function loadProfile() {
+      const el = document.getElementById('profile-content')
       const params = new URLSearchParams(location.search)
       const username = params.get('id') ?? params.get('username')
       if (!username) {
-        document.getElementById('profile-content').innerHTML = '<p class="text-text-muted">No username specified.</p>'
+        el.innerHTML = '<div class="atlas-banner" data-tone="warn">No username specified.</div>'
         return
       }
       try {
-        // Fetch market sources contributed by this user
         const res = await fetch(`${apiUrl}/market?limit=100`)
         const data = await res.json()
-        const contributions = (data.sources ?? []).filter(s => s.contributorId === username || s.name.toLowerCase().includes(username.toLowerCase()))
-        document.getElementById('profile-content').innerHTML = `
-          <h1 class="text-3xl font-bold text-text">@${esc(username)}</h1>
-          <p class="mt-2 text-text-muted">${contributions.length} contributed source${contributions.length !== 1 ? 's' : ''}</p>
-          <div class="mt-8 grid gap-4 sm:grid-cols-2">
-            ${contributions.length ? contributions.map(s => `
-              <a href="/market/source?id=${s.id}" class="block rounded-lg border border-border bg-surface p-4 hover:border-primary transition-colors">
-                <span class="text-xs font-mono px-2 py-0.5 rounded bg-surface-2 text-text-muted">${esc(s.type)}</span>
-                <h3 class="mt-2 font-semibold text-text">${esc(s.name)}</h3>
+        const contributions = (data.sources ?? []).filter(
+          (s) => s.contributorId === username || (s.name || '').toLowerCase().includes(username.toLowerCase()),
+        )
+        el.innerHTML = `
+          <h1 class="text-2xl font-medium tracking-tight text-text sm:text-3xl">@${esc(username)}</h1>
+          <p class="mt-2 text-sm text-text-muted">${contributions.length} contributed source${contributions.length !== 1 ? 's' : ''}</p>
+          <div class="mt-8 grid gap-3 sm:grid-cols-2">
+            ${
+              contributions.length
+                ? contributions
+                    .map(
+                      (s) => `
+              <a href="/market/source?id=${s.id}" class="atlas-card block p-4 no-underline transition-colors hover:border-primary/40">
+                <span class="text-[11px] font-mono px-2 py-0.5 rounded-md border border-border bg-surface-2 text-text-muted">${esc(s.type)}</span>
+                <h3 class="mt-2 text-sm font-medium text-text">${esc(s.name)}</h3>
                 <div class="mt-2 flex gap-4 text-xs text-text-muted">
                   <span>${s.userCount} users</span>
                   <span>${s.avgScore}/10 avg</span>
                 </div>
-              </a>
-            `).join('') : '<p class="text-text-muted col-span-2">No contributions yet.</p>'}
+              </a>`,
+                    )
+                    .join('')
+                : '<p class="text-sm text-text-muted col-span-2">No contributions yet.</p>'
+            }
           </div>
         `
       } catch (e) {
-        document.getElementById('profile-content').innerHTML = `<p class="text-text-muted">Error: ${e.message}</p>`
+        el.innerHTML = `<div class="atlas-banner" data-tone="warn">Error: ${esc(e.message)}</div>`
       }
     }
 
@@ -53,4 +62,4 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
 
     loadProfile()
   </script>
-</Base>
+</AppShell>

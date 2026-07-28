@@ -745,6 +745,8 @@ app.get('/items/:id', async (c) => {
   return c.json({
     item: {
       id: item.externalId,
+      /** Internal DB id for feedback / scores joins */
+      itemId: item.id,
       title: item.title,
       url: item.url,
       author: item.author,

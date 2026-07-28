@@ -1,40 +1,44 @@
 ---
-import Base from '../layouts/Base.astro'
+import AppShell from '../layouts/AppShell.astro'
 
 const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
 ---
 
-<Base title="Item — Atlas">
-  <main class="mx-auto max-w-3xl px-6 py-12">
-    <a href="/dashboard" class="text-sm text-text-muted hover:text-text">← Back to dashboard</a>
-    <div id="item-content" class="mt-8">
-      <p class="text-text-muted">Loading item...</p>
-    </div>
-  </main>
+<AppShell title="Item — Atlas" description="Scored item detail" width="md">
+  <a href="/dashboard" class="text-sm text-text-muted no-underline hover:text-text">← Back to digest</a>
+  <div id="item-content" class="mt-6" aria-live="polite">
+    <div class="atlas-skeleton h-10 w-3/4 max-w-md" aria-hidden="true"></div>
+    <div class="atlas-skeleton mt-4 h-32 w-full" aria-hidden="true"></div>
+    <p class="sr-only">Loading item…</p>
+  </div>
 
   <script is:inline define:vars={{ apiUrl: API_URL }}>
+    let currentItemId = null
+
     async function loadItem() {
       const params = new URLSearchParams(location.search)
       const id = params.get('id')
+      const el = document.getElementById('item-content')
       if (!id) {
-        document.getElementById('item-content').innerHTML = '<p class="text-text-muted">No item ID specified.</p>'
+        el.innerHTML = '<div class="atlas-banner" data-tone="warn">No item ID specified.</div>'
         return
       }
       try {
         const res = await fetch(`${apiUrl}/items/${encodeURIComponent(id)}`, { credentials: 'include' })
         if (res.status === 401) {
-          document.getElementById('item-content').innerHTML = '<p class="text-text-muted">Please <a href="/signup" class="text-primary">sign in</a> to view this item.</p>'
+          el.innerHTML = `<div class="atlas-banner" data-tone="info">Please <a href="/signup" class="text-primary">sign in</a> to view scored items.</div>`
           return
         }
         if (!res.ok) {
           const data = await res.json().catch(() => ({}))
-          document.getElementById('item-content').innerHTML = `<p class="text-text-muted">${data.error ?? 'Item not found'}</p>`
+          el.innerHTML = `<div class="atlas-banner" data-tone="warn">${esc(data.error ?? 'Item not found')}</div>`
           return
         }
         const data = await res.json()
+        currentItemId = data.item?.itemId ?? null
         render(data)
       } catch (e) {
-        document.getElementById('item-content').innerHTML = `<p class="text-text-muted">Failed to load: ${e.message}</p>`
+        el.innerHTML = `<div class="atlas-banner" data-tone="warn">Failed to load: ${esc(e.message)}</div>`
       }
     }
 
@@ -48,56 +52,136 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
     function render(data) {
       const { item, score } = data
       let html = `
-        <h1 class="text-3xl font-bold text-text">
-          <a href="${item.url}" class="hover:text-primary" target="_blank" rel="noopener">${esc(item.title)}</a>
-        </h1>
-        <div class="mt-2 text-sm text-text-muted">
-          ${item.author ? `by ${esc(item.author)} · ` : ''}${new Date(item.publishedAt).toLocaleDateString()}
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div class="min-w-0">
+            <h1 class="text-2xl font-medium tracking-tight text-text sm:text-3xl">
+              <a href="${esc(item.url)}" class="text-text no-underline hover:text-primary" target="_blank" rel="noopener noreferrer">${esc(item.title)}</a>
+            </h1>
+            <p class="mt-2 text-sm text-text-muted">
+              ${item.author ? `by ${esc(item.author)} · ` : ''}
+              ${item.publishedAt ? new Date(item.publishedAt).toLocaleDateString() : ''}
+            </p>
+          </div>
+          <a href="${esc(item.url)}" target="_blank" rel="noopener noreferrer"
+            class="inline-flex h-9 shrink-0 items-center rounded-md border border-border bg-surface px-3 text-sm font-medium text-text no-underline hover:border-primary/50">
+            Open source ↗
+          </a>
         </div>
       `
+
       if (score) {
         html += `
-          <div class="mt-6 rounded-lg border border-border bg-surface p-6">
+          <div class="atlas-card mt-6 p-5">
             <div class="flex items-center gap-3">
               <span class="score-badge" data-tier="${tier(score.value)}">${score.value}/10</span>
               <span class="text-sm text-text-muted">Your score</span>
             </div>
-            <p class="mt-3 text-text">${esc(score.reason)}</p>
-            ${score.tags.length ? `<div class="mt-3 flex flex-wrap gap-2">${score.tags.map(t => `<code class="text-xs bg-surface-2 px-2 py-0.5 rounded">${esc(t)}</code>`).join('')}</div>` : ''}
+            <p class="mt-3 text-sm leading-relaxed text-text">${esc(score.reason)}</p>
+            ${
+              score.tags?.length
+                ? `<div class="mt-3 flex flex-wrap gap-1.5">${score.tags
+                    .map(
+                      (t) =>
+                        `<code class="rounded-md border border-border bg-surface-2 px-2 py-0.5 text-xs">${esc(t)}</code>`,
+                    )
+                    .join('')}</div>`
+                : ''
+            }
           </div>
         `
+
         if (score.impact) {
           const imp = score.impact
-          const affects = imp.affectsStack
-          const confColor = imp.confidence === 'high' ? 'text-emerald-500' : imp.confidence === 'medium' ? 'text-amber-500' : 'text-slate-400'
+          const affects = imp.affectsStack ?? imp.affects_stack
+          const components = imp.affectedComponents ?? imp.affected_components ?? []
+          const conf = imp.confidence ?? 'low'
+          const confClass =
+            conf === 'high'
+              ? 'text-[var(--color-score-high)]'
+              : conf === 'medium'
+                ? 'text-[var(--color-score-mid)]'
+                : 'text-text-muted'
           html += `
-            <div class="mt-4 rounded-lg border border-border bg-surface p-6">
-              <h2 class="text-lg font-semibold text-text">Impact on your stack</h2>
-              <div class="mt-4 space-y-3">
-                <div class="flex gap-4">
-                  <span class="w-40 text-sm text-text-muted">Affects your stack?</span>
-                  <span class="font-medium ${affects ? 'text-emerald-500' : 'text-slate-400'}">${affects ? 'Yes' : 'No'}</span>
+            <div class="atlas-card mt-4 p-5">
+              <h2 class="text-base font-medium text-text">Impact on your stack</h2>
+              <dl class="mt-4 space-y-3 text-sm">
+                <div class="flex flex-col gap-1 sm:flex-row sm:gap-4">
+                  <dt class="w-40 shrink-0 text-text-muted">Affects your stack?</dt>
+                  <dd class="font-medium ${affects ? 'text-[var(--color-score-high)]' : 'text-text-muted'}">${affects ? 'Yes' : 'No'}</dd>
                 </div>
-                ${imp.affectedComponents.length ? `
-                  <div class="flex gap-4">
-                    <span class="w-40 text-sm text-text-muted">Affected components</span>
-                    <span class="flex flex-wrap gap-2">${imp.affectedComponents.map(c => `<code class="text-xs bg-surface-2 px-2 py-0.5 rounded">${esc(c)}</code>`).join('')}</span>
-                  </div>
-                ` : ''}
-                <div class="flex gap-4">
-                  <span class="w-40 text-sm text-text-muted">Action</span>
-                  <span class="text-text">${esc(imp.action)}</span>
+                ${
+                  components.length
+                    ? `<div class="flex flex-col gap-1 sm:flex-row sm:gap-4">
+                  <dt class="w-40 shrink-0 text-text-muted">Components</dt>
+                  <dd class="flex flex-wrap gap-1.5">${components
+                    .map(
+                      (c) =>
+                        `<code class="rounded-md border border-border bg-surface-2 px-2 py-0.5 text-xs">${esc(c)}</code>`,
+                    )
+                    .join('')}</dd>
+                </div>`
+                    : ''
+                }
+                <div class="flex flex-col gap-1 sm:flex-row sm:gap-4">
+                  <dt class="w-40 shrink-0 text-text-muted">Action</dt>
+                  <dd class="text-text">${esc(imp.action ?? '')}</dd>
                 </div>
-                <div class="flex gap-4">
-                  <span class="w-40 text-sm text-text-muted">Confidence</span>
-                  <span class="font-medium ${confColor}">${imp.confidence}</span>
+                <div class="flex flex-col gap-1 sm:flex-row sm:gap-4">
+                  <dt class="w-40 shrink-0 text-text-muted">Confidence</dt>
+                  <dd class="font-medium ${confClass}">${esc(conf)}</dd>
                 </div>
-              </div>
+              </dl>
             </div>
           `
         }
+      } else {
+        html += `<div class="atlas-banner mt-6" data-tone="info">No personal score yet. Generate your digest first.</div>`
       }
+
+      // Feedback
+      html += `
+        <div class="atlas-card mt-6 p-5">
+          <h2 class="text-base font-medium text-text">Teach Atlas</h2>
+          <p class="mt-1 text-sm text-text-muted">Feedback adjusts your topic weights for future scoring.</p>
+          <div class="mt-4 flex flex-wrap gap-2" role="group" aria-label="Feedback">
+            <button type="button" data-signal="up" class="fb-btn h-9 rounded-md border border-border bg-surface px-3 text-sm font-medium text-text hover:border-primary/50">👍 Useful</button>
+            <button type="button" data-signal="down" class="fb-btn h-9 rounded-md border border-border bg-surface px-3 text-sm font-medium text-text hover:border-primary/50">👎 Not for me</button>
+            <button type="button" data-signal="bookmark" class="fb-btn h-9 rounded-md border border-border bg-surface px-3 text-sm font-medium text-text hover:border-primary/50">🔖 Save</button>
+            <button type="button" data-signal="dismiss" class="fb-btn h-9 rounded-md border border-border bg-surface px-3 text-sm font-medium text-text-muted hover:border-rose-500/40 hover:text-rose-500">Dismiss</button>
+          </div>
+          <p id="fb-status" class="mt-3 text-xs text-text-muted" aria-live="polite"></p>
+        </div>
+      `
+
       document.getElementById('item-content').innerHTML = html
+      document.querySelectorAll('.fb-btn').forEach((btn) => {
+        btn.addEventListener('click', () => sendFeedback(btn.getAttribute('data-signal'), btn))
+      })
+    }
+
+    async function sendFeedback(signal, btn) {
+      const status = document.getElementById('fb-status')
+      if (!currentItemId) {
+        if (status) status.textContent = 'Cannot send feedback — missing item id.'
+        return
+      }
+      if (btn) btn.setAttribute('disabled', 'true')
+      if (status) status.textContent = 'Saving…'
+      try {
+        const res = await fetch(`${apiUrl}/feedback`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ itemId: currentItemId, signal }),
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(data.error ?? 'Failed')
+        if (status) status.textContent = 'Saved — Atlas will weight similar items accordingly.'
+      } catch (e) {
+        if (status) status.textContent = `Error: ${e.message}`
+      } finally {
+        if (btn) btn.removeAttribute('disabled')
+      }
     }
 
     function esc(s) {
@@ -108,4 +192,4 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
 
     loadItem()
   </script>
-</Base>
+</AppShell>

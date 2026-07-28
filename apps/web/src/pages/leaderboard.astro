@@ -1,44 +1,51 @@
 ---
-import Base from '../layouts/Base.astro'
+import PageHeader from '../components/ui/PageHeader.astro'
+import AppShell from '../layouts/AppShell.astro'
 
 const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
 ---
 
-<Base title="Leaderboard — Atlas">
-  <main class="mx-auto max-w-3xl px-6 py-12">
-    <h1 class="text-3xl font-bold text-text">Leaderboard</h1>
-    <p class="mt-2 text-text-muted">Top contributors to the Atlas source market.</p>
+<AppShell title="Leaderboard — Atlas" description="Top source market contributors" width="md">
+  <PageHeader
+    title="Leaderboard"
+    description="Top contributors to the Atlas source market."
+  />
 
-    <div id="leaderboard-content" class="mt-8">
-      <p class="text-text-muted">Loading...</p>
-    </div>
-  </main>
+  <div id="leaderboard-content" class="mt-8" aria-live="polite">
+    <div class="atlas-skeleton h-16 w-full" aria-hidden="true"></div>
+    <div class="atlas-skeleton mt-3 h-16 w-full" aria-hidden="true"></div>
+    <p class="sr-only">Loading leaderboard…</p>
+  </div>
 
   <script is:inline define:vars={{ apiUrl: API_URL }}>
     async function loadLeaderboard() {
+      const el = document.getElementById('leaderboard-content')
       try {
         const res = await fetch(`${apiUrl}/leaderboard`)
         const data = await res.json()
         const lb = data.leaderboard ?? []
         if (!lb.length) {
-          document.getElementById('leaderboard-content').innerHTML = '<p class="text-text-muted">No contributors yet. Be the first to <a href="/market/submit" class="text-primary">submit a source</a>!</p>'
+          el.innerHTML = `<div class="flex flex-col items-center rounded-lg border border-dashed border-border bg-surface-2/50 px-6 py-12 text-center">
+            <p class="text-sm font-medium text-text">No contributors yet</p>
+            <p class="mt-1 text-sm text-text-muted">Be the first to <a href="/market/submit" class="text-primary">submit a source</a>.</p>
+          </div>`
           return
         }
-        document.getElementById('leaderboard-content').innerHTML = `
-          <div class="space-y-3">
+        el.innerHTML = `
+          <div class="space-y-2">
             ${lb.map((entry, i) => `
-              <div class="flex items-center gap-4 rounded-lg border border-border bg-surface p-4">
-                <span class="text-2xl font-bold text-text-muted w-8 text-right">#${i + 1}</span>
-                <div class="flex-1">
-                  <a href="/u?id=${entry.userId}" class="font-semibold text-text hover:text-primary">${esc(entry.userId.slice(0, 8))}</a>
-                  <div class="text-sm text-text-muted">${entry.sourceCount} source${entry.sourceCount !== 1 ? 's' : ''} · ${entry.maxAvgScore}/10 best avg · ${entry.maxUserCount} max users</div>
+              <div class="flex items-center gap-4 rounded-md border border-border bg-surface p-4">
+                <span class="w-8 text-right text-lg font-medium text-text-muted">#${i + 1}</span>
+                <div class="min-w-0 flex-1">
+                  <a href="/u?id=${encodeURIComponent(entry.userId)}" class="text-sm font-medium text-text no-underline hover:text-primary">${esc(entry.userId.slice(0, 8))}…</a>
+                  <div class="mt-0.5 text-xs text-text-muted">${entry.sourceCount} source${entry.sourceCount !== 1 ? 's' : ''} · ${entry.maxAvgScore}/10 best · ${entry.maxUserCount} max users</div>
                 </div>
               </div>
             `).join('')}
           </div>
         `
       } catch (e) {
-        document.getElementById('leaderboard-content').innerHTML = `<p class="text-text-muted">Error: ${e.message}</p>`
+        el.innerHTML = `<div class="atlas-banner" data-tone="warn">Error: ${esc(e.message)}</div>`
       }
     }
 
@@ -50,4 +57,4 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
 
     loadLeaderboard()
   </script>
-</Base>
+</AppShell>

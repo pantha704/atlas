@@ -1,10 +1,9 @@
 ---
-import Base from '../layouts/Base.astro'
+import AppShell from '../layouts/AppShell.astro'
 ---
 
-<Base title="Docs — Atlas">
-  <main class="mx-auto max-w-3xl px-6 py-12">
-    <h1 class="text-3xl font-bold text-text">Documentation</h1>
+<AppShell title="Docs — Atlas" description="Run and contribute to Atlas" width="md">
+    <h1 class="text-2xl font-medium tracking-tight text-text sm:text-3xl">Documentation</h1>
     <p class="mt-2 text-text-muted">Everything you need to run and contribute to Atlas.</p>
 
     <div class="mt-8 space-y-8">
@@ -77,5 +76,4 @@ import Base from '../layouts/Base.astro'
         </div>
       </section>
     </div>
-  </main>
-</Base>
+</AppShell>
