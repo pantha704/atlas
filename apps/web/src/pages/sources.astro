@@ -1,30 +1,29 @@
 ---
-import Base from '../layouts/Base.astro'
+import Button from '../components/ui/Button.astro'
+import Card from '../components/ui/Card.astro'
+import PageHeader from '../components/ui/PageHeader.astro'
+import AppShell from '../layouts/AppShell.astro'
 
 const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
 ---
 
-<Base title="Sources — Atlas">
-  <main class="mx-auto max-w-3xl px-6 py-12">
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-3xl font-bold text-text">Your sources</h1>
-        <p class="mt-2 text-text-muted">Manage where Atlas fetches your daily news.</p>
-      </div>
-      <a href="/onboarding" class="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-text hover:border-primary">
-        + Add via onboarding
-      </a>
-    </div>
+<AppShell title="Sources — Atlas" description="Manage where Atlas fetches news" width="md">
+  <PageHeader title="Your sources" description="Manage where Atlas fetches your daily news.">
+    <Fragment slot="actions">
+      <Button href="/onboarding" variant="secondary" size="sm">Guided setup</Button>
+      <Button href="/market" variant="ghost" size="sm">Browse market</Button>
+    </Fragment>
+  </PageHeader>
 
     <div id="sources-list" class="mt-8 space-y-3">
-      <div class="rounded-lg border border-border bg-surface-2 p-8 text-center text-text-muted">
-        Loading your sources...
-      </div>
+      <div class="atlas-skeleton h-20 w-full" aria-hidden="true"></div>
+      <div class="atlas-skeleton h-20 w-full" aria-hidden="true"></div>
+      <p class="sr-only">Loading your sources…</p>
     </div>
 
     <!-- Add source form -->
-    <div class="mt-12 rounded-lg border border-border bg-surface p-6">
-      <h2 class="text-lg font-semibold text-text">Add a source</h2>
+    <Card class="mt-10">
+      <h2 class="text-base font-medium text-text">Add a source</h2>
 
       <div class="mt-4 grid gap-4 sm:grid-cols-2">
         <div>
@@ -45,12 +44,11 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
         </div>
       </div>
 
-      <button id="add-source-btn" class="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-hover">
+      <Button id="add-source-btn" variant="primary" size="sm" class="mt-4">
         Add source
-      </button>
-      <p id="add-status" class="mt-2 text-sm text-text-muted"></p>
-    </div>
-  </main>
+      </Button>
+      <p id="add-status" class="mt-2 text-sm text-text-muted" aria-live="polite"></p>
+    </Card>
 
   <script is:inline define:vars={{ apiUrl: API_URL }}>
     const typePlaceholders = {
@@ -82,30 +80,33 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
         const data = await res.json()
         renderSources(data.sources ?? [])
       } catch (e) {
-        document.getElementById('sources-list').innerHTML = `<div class="rounded-lg border border-border bg-surface-2 p-8 text-center text-text-muted">Error: ${e.message}</div>`
+        document.getElementById('sources-list').innerHTML = `<div class="atlas-banner" data-tone="warn">Error: ${e.message}</div>`
       }
     }
 
     function renderSources(sources) {
       const container = document.getElementById('sources-list')
       if (!sources.length) {
-        container.innerHTML = `<div class="rounded-lg border border-border bg-surface-2 p-8 text-center text-text-muted">No sources yet. Add one below or run onboarding.</div>`
+        container.innerHTML = `<div class="flex flex-col items-center rounded-lg border border-dashed border-border bg-surface-2/50 px-6 py-12 text-center">
+          <p class="text-sm font-medium text-text">No sources yet</p>
+          <p class="mt-1 text-sm text-text-muted">Add one below, use guided setup, or pick from the market.</p>
+        </div>`
         return
       }
       container.innerHTML = sources.map(s => {
         const config = JSON.parse(s.config)
         const label = sourceLabel(s.type, config)
-        return `<div class="flex items-center justify-between rounded-lg border border-border bg-surface p-4">
-          <div class="flex items-center gap-3">
-            <span class="rounded-md bg-surface-2 px-2 py-1 text-xs font-mono text-text-muted">${s.type}</span>
-            <div>
-              <div class="font-medium text-text">${label}</div>
-              <div class="text-sm text-text-muted">${s.enabled ? 'enabled' : 'disabled'}</div>
+        return `<div class="flex flex-col gap-3 rounded-md border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex min-w-0 items-center gap-3">
+            <span class="shrink-0 rounded-md border border-border bg-surface-2 px-2 py-1 text-[11px] font-mono text-text-muted">${s.type}</span>
+            <div class="min-w-0">
+              <div class="truncate text-sm font-medium text-text">${label}</div>
+              <div class="text-xs text-text-muted">${s.enabled ? 'Enabled' : 'Disabled'}</div>
             </div>
           </div>
-          <div class="flex gap-2">
-            <button onclick="toggleSource('${s.id}', ${!s.enabled})" class="rounded-md border border-border px-3 py-1 text-xs text-text hover:border-primary">${s.enabled ? 'Disable' : 'Enable'}</button>
-            <button onclick="deleteSource('${s.id}')" class="rounded-md border border-border px-3 py-1 text-xs text-rose-500 hover:border-rose-500">Delete</button>
+          <div class="flex shrink-0 gap-2">
+            <button type="button" onclick="toggleSource('${s.id}', ${!s.enabled})" class="h-8 rounded-md border border-border px-3 text-xs font-medium text-text hover:border-primary/50">${s.enabled ? 'Disable' : 'Enable'}</button>
+            <button type="button" onclick="deleteSource('${s.id}')" class="h-8 rounded-md border border-rose-500/25 px-3 text-xs font-medium text-rose-500 hover:bg-rose-500/10">Delete</button>
           </div>
         </div>`
       }).join('')
@@ -198,4 +199,4 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
 
     loadSources()
   </script>
-</Base>
+</AppShell>

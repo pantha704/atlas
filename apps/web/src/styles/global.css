@@ -110,6 +110,90 @@ body {
   font-feature-settings: "cv01", "ss03";
   -webkit-font-smoothing: antialiased;
   font-weight: 400;
+  line-height: 1.5;
+}
+
+/* Screen-reader only (skip link) */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+.sr-only:focus,
+.focus\:not-sr-only:focus {
+  position: absolute;
+  width: auto;
+  height: auto;
+  padding: inherit;
+  margin: inherit;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+
+/* Form controls — consistent focus */
+input:not([type="range"]):not([type="checkbox"]):not([type="radio"]),
+textarea,
+select {
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+input:not([type="range"]):focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 25%, transparent);
+}
+
+/* Skeleton shimmer for loading states */
+@keyframes atlas-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.atlas-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-2) 0%,
+    var(--color-border) 50%,
+    var(--color-surface-2) 100%
+  );
+  background-size: 200% 100%;
+  animation: atlas-shimmer 1.4s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+@media (prefers-reduced-motion: reduce) {
+  .atlas-skeleton { animation: none; opacity: 0.6; }
+}
+
+/* Status banner */
+.atlas-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+.atlas-banner[data-tone="info"] {
+  border-color: color-mix(in srgb, var(--color-primary) 30%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 8%, var(--color-surface));
+}
+.atlas-banner[data-tone="success"] {
+  border-color: color-mix(in srgb, var(--color-score-high) 30%, var(--color-border));
+  background: color-mix(in srgb, var(--color-score-high) 8%, var(--color-surface));
+}
+.atlas-banner[data-tone="warn"] {
+  border-color: color-mix(in srgb, var(--color-score-mid) 35%, var(--color-border));
+  background: color-mix(in srgb, var(--color-score-mid) 8%, var(--color-surface));
 }
 
 /* Linear signature 510 weight on emphasized UI text */

@@ -1,0 +1,27 @@
+---
+interface Props {
+  variant?: 'default' | 'primary' | 'success' | 'warning' | 'muted' | 'pro'
+  class?: string
+}
+
+const { variant = 'default', class: className = '' } = Astro.props
+
+const variants: Record<string, string> = {
+  default: 'border-border bg-surface-2 text-text-muted',
+  primary: 'border-primary/25 bg-primary/10 text-primary',
+  success: 'border-emerald-500/25 bg-emerald-500/10 text-[var(--color-score-high)]',
+  warning: 'border-amber-500/25 bg-amber-500/10 text-[var(--color-score-mid)]',
+  muted: 'border-transparent bg-surface-2 text-text-muted',
+  pro: 'border-primary/30 bg-primary/15 text-primary',
+}
+
+const cls = [
+  'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium tracking-wide',
+  variants[variant],
+  className,
+]
+  .filter(Boolean)
+  .join(' ')
+---
+
+<span class={cls}><slot /></span>

@@ -516,6 +516,8 @@ app.get('/my-digest', async (c) => {
   const db = getDB(c.env)
   const plan = user.plan as Plan
   const force = c.req.query('force') === '1'
+  // peek/cached=1: return same-day digest only — never run scoring (safe for SSR)
+  const peekOnly = c.req.query('peek') === '1' || c.req.query('cached') === '1'
   const today = new Date().toISOString().slice(0, 10)
 
   // Serve cached same-day digest unless force=1
@@ -531,6 +533,9 @@ app.get('/my-digest', async (c) => {
         itemCounts: { cached: true },
         digestId: cached[0].id,
       })
+    }
+    if (peekOnly) {
+      return c.json({ error: 'no cached digest for today', code: 'no_cache' }, 404)
     }
   }
 

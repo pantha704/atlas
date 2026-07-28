@@ -1,34 +1,82 @@
 ---
 import { renderDigestMarkdown } from '@atlas/core'
-import Base from '../layouts/Base.astro'
+import Badge from '../components/ui/Badge.astro'
+import Button from '../components/ui/Button.astro'
+import Card from '../components/ui/Card.astro'
+import EmptyState from '../components/ui/EmptyState.astro'
+import PageHeader from '../components/ui/PageHeader.astro'
+import AppShell from '../layouts/AppShell.astro'
 
 const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
+const cookie = Astro.request.headers.get('cookie') ?? ''
 
-// ponytail: server-side fetch for the public digest; client JS handles auth state + per-user
+type DigestMode = 'personal' | 'public' | 'demo' | 'empty'
+
 let digestMd: string | null = null
 let digestError: string | null = null
+let mode: DigestMode = 'empty'
+let itemMeta: { scored?: number; fromCache?: number; newlyScored?: number } | null = null
+let userName: string | null = null
+let userPlan: string | null = null
+
+// 1) Prefer authenticated personal digest (SSR with session cookie)
 try {
-  const res = await fetch(`${API_URL}/digest`, { signal: AbortSignal.timeout(5000) })
-  if (res.ok) {
-    const data = (await res.json()) as { markdown?: string }
-    digestMd = data.markdown ?? null
-  } else {
-    digestError = 'Pipeline has not run yet. Click "Trigger pipeline" or wait for the daily cron.'
+  const meRes = await fetch(`${API_URL}/auth/me`, {
+    headers: cookie ? { cookie } : {},
+    signal: AbortSignal.timeout(4000),
+  })
+  if (meRes.ok) {
+    const me = (await meRes.json()) as { user?: { name?: string; plan?: string } | null }
+    if (me.user) {
+      userName = me.user.name ?? null
+      userPlan = me.user.plan ?? 'free'
+      // peek only — never trigger full score pipeline on page load
+      const digRes = await fetch(`${API_URL}/my-digest?peek=1`, {
+        headers: { cookie },
+        signal: AbortSignal.timeout(5000),
+      })
+      if (digRes.ok) {
+        const data = (await digRes.json()) as {
+          markdown?: string
+          itemCounts?: { scored?: number; fromCache?: number; newlyScored?: number; cached?: boolean }
+        }
+        if (data.markdown) {
+          digestMd = data.markdown
+          mode = 'personal'
+          itemMeta = data.itemCounts ?? null
+        }
+      }
+    }
   }
 } catch {
-  digestError = 'API not reachable. Run `bun dev` first.'
+  // fall through to public
 }
 
-// Demo fallback when no live digest yet
-let isDemo = false
+// 2) Public global digest
+if (!digestMd) {
+  try {
+    const res = await fetch(`${API_URL}/digest`, { signal: AbortSignal.timeout(5000) })
+    if (res.ok) {
+      const data = (await res.json()) as { markdown?: string }
+      if (data.markdown) {
+        digestMd = data.markdown
+        mode = 'public'
+      }
+    }
+  } catch {
+    digestError = 'API not reachable. Start the stack with `bun dev`.'
+  }
+}
+
+// 3) Demo seed
 if (!digestMd) {
   try {
     const res = await fetch(`${API_URL}/demo/digest`, { signal: AbortSignal.timeout(5000) })
     if (res.ok) {
-      const data = (await res.json()) as { markdown?: string; demo?: boolean }
+      const data = (await res.json()) as { markdown?: string }
       if (data.markdown) {
         digestMd = data.markdown
-        isDemo = true
+        mode = 'demo'
         digestError = null
       }
     }
@@ -36,149 +84,232 @@ if (!digestMd) {
     // keep prior error
   }
 }
+
+if (!digestMd && !digestError) {
+  digestError = 'No digest yet. Run the global pipeline or wait for the daily cron.'
+}
+
+const modeLabel =
+  mode === 'personal' ? 'Personalized' : mode === 'public' ? 'Global' : mode === 'demo' ? 'Demo' : 'Empty'
+
+const subtitle =
+  mode === 'personal'
+    ? userName
+      ? `Scored for ${userName}. Impact on your stack, not a crowd feed.`
+      : 'Scored against your profile and stack.'
+    : mode === 'demo'
+      ? 'Seed preview — sign in and connect sources for a real personal digest.'
+      : mode === 'public'
+        ? 'Shared global digest. Sign in for per-user scoring and impact.'
+        : 'Nothing to show yet.'
 ---
 
-<Base title="Dashboard — Atlas">
-  <main class="mx-auto max-w-4xl px-6 py-12">
-    <!-- Auth-aware header -->
-    <div id="auth-header" class="flex items-center justify-between">
-      <div>
-        <h1 class="text-3xl font-bold text-text">Today's digest</h1>
-        <p id="digest-subtitle" class="mt-2 text-text-muted">
-          {isDemo
-            ? 'Demo preview (seed data). Sign up to personalize.'
-            : 'Public global digest.'}{' '}
-          <a href="/signup" class="text-primary">Sign up</a> to personalize.
-        </p>
-      </div>
-      <div id="auth-actions" class="flex gap-3">
-        <a href="/signup" class="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-hover">Sign up</a>
-      </div>
-    </div>
+<AppShell title="Digest — Atlas" description="Your daily personal news digest">
+  <PageHeader title="Today's digest" description={subtitle}>
+    <Fragment slot="actions">
+      {
+        mode !== 'empty' && (
+          <Badge variant={mode === 'personal' ? 'success' : mode === 'demo' ? 'warning' : 'muted'}>
+            {modeLabel}
+          </Badge>
+        )
+      }
+      {
+        userPlan && (
+          <Badge variant={userPlan === 'pro' ? 'pro' : 'default'}>
+            {userPlan === 'pro' ? 'Pro' : 'Free'}
+          </Badge>
+        )
+      }
+    </Fragment>
+  </PageHeader>
 
-    <!-- Trigger + regenerate buttons -->
-    <div class="mt-4 flex gap-3 flex-wrap">
-      <button id="triggerBtn" class="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-text hover:border-primary">
-        ↻ Trigger global pipeline
-      </button>
-      <button id="myDigestBtn" class="hidden rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-text hover:border-primary">
-        ↻ Generate my personalized digest
-      </button>
-      <button id="forceDigestBtn" class="hidden rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-text hover:border-primary">
-        Force rescore
-      </button>
-      <p id="triggerStatus" class="self-center text-sm text-text-muted"></p>
-    </div>
-
-    <!-- Digest content -->
-    <div id="digestContainer" class="mt-12">
-      {digestError && (
-        <div class="rounded-lg border border-border bg-surface-2 p-8 text-center text-text-muted">
-          {digestError}
+  <!-- Context banner -->
+  {
+    mode === 'demo' && (
+      <div class="atlas-banner mt-6" data-tone="warn" role="status">
+        <span aria-hidden="true">✦</span>
+        <div>
+          <p class="font-medium text-text">Demo mode</p>
+          <p class="mt-0.5">
+            This is seed data so the product never feels empty.
+            <a href="/signup" class="text-primary">Sign in with GitHub</a>
+            {' '}to personalize.
+          </p>
         </div>
-      )}
-      {digestMd && (
-        <div class="prose-atlas" set:html={renderDigestMarkdown(digestMd)}></div>
-      )}
-    </div>
-  </main>
+      </div>
+    )
+  }
+  {
+    mode === 'public' && !userName && (
+      <div class="atlas-banner mt-6" data-tone="info" role="status">
+        <span aria-hidden="true">→</span>
+        <div>
+          <p class="font-medium text-text">Not signed in</p>
+          <p class="mt-0.5">
+            You’re viewing the global digest.
+            <a href="/signup" class="text-primary">Sign in</a>
+            {' '}for scores against your stack.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
-  <script is:inline define:vars={{ apiUrl: API_URL }}>
-    // Auth state check
+  <!-- Toolbar -->
+  <Card class="mt-6" padding="sm">
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex flex-wrap items-center gap-2">
+        <Button id="myDigestBtn" variant="primary" size="sm" class="hidden">
+          Generate my digest
+        </Button>
+        <Button id="forceDigestBtn" variant="secondary" size="sm" class="hidden">
+          Force rescore
+        </Button>
+        <Button id="triggerBtn" variant="ghost" size="sm">
+          Run global pipeline
+        </Button>
+      </div>
+      <p id="triggerStatus" class="text-xs text-text-muted sm:text-right" aria-live="polite"></p>
+    </div>
+    {
+      itemMeta && mode === 'personal' && (
+        <p class="mt-3 border-t border-border pt-3 text-xs text-text-muted">
+          {itemMeta.scored ?? 0} items
+          {typeof itemMeta.fromCache === 'number' && (
+            <> · {itemMeta.fromCache} cached scores</>
+          )}
+          {typeof itemMeta.newlyScored === 'number' && itemMeta.newlyScored > 0 && (
+            <> · {itemMeta.newlyScored} newly scored</>
+          )}
+        </p>
+      )
+    }
+  </Card>
+
+  <!-- Digest body -->
+  <section class="mt-8" aria-label="Digest content">
+    {
+      digestError && !digestMd && (
+        <EmptyState
+          title="No digest yet"
+          description={digestError}
+        >
+          <Fragment slot="actions">
+            <Button href="/sources" variant="secondary" size="sm">Add sources</Button>
+            <Button href="/signup" variant="primary" size="sm">Sign in</Button>
+          </Fragment>
+        </EmptyState>
+      )
+    }
+
+    {
+      digestMd && (
+        <Card padding="lg" class="overflow-hidden">
+          <article class="prose-atlas max-w-none" set:html={renderDigestMarkdown(digestMd)} />
+        </Card>
+      )
+    }
+  </section>
+
+  <!-- Quick links -->
+  <div class="mt-10 grid gap-3 sm:grid-cols-3">
+    <a
+      href="/sources"
+      class="atlas-card block p-4 no-underline transition-colors hover:border-primary/40"
+    >
+      <p class="text-sm font-medium text-text">Sources</p>
+      <p class="mt-1 text-xs text-text-muted">Connect HN, RSS, GitHub, more</p>
+    </a>
+    <a
+      href="/profile"
+      class="atlas-card block p-4 no-underline transition-colors hover:border-primary/40"
+    >
+      <p class="text-sm font-medium text-text">Profile</p>
+      <p class="mt-1 text-xs text-text-muted">Stack, interests, delivery, plan</p>
+    </a>
+    <a
+      href="/market"
+      class="atlas-card block p-4 no-underline transition-colors hover:border-primary/40"
+    >
+      <p class="text-sm font-medium text-text">Market</p>
+      <p class="mt-1 text-xs text-text-muted">Browse community sources</p>
+    </a>
+  </div>
+
+  <script is:inline define:vars={{ apiUrl: API_URL, initialMode: mode, initialUser: userName }}>
+    function setStatus(text) {
+      const el = document.getElementById('triggerStatus')
+      if (el) el.textContent = text || ''
+    }
+
     async function checkAuth() {
       try {
         const res = await fetch(`${apiUrl}/auth/me`, { credentials: 'include' })
-        if (res.ok) {
-          const data = await res.json()
-          if (data.user) {
-            // Logged in — show personalized UI
-            const subtitle = document.getElementById('digest-subtitle')
-            const actions = document.getElementById('auth-actions')
-            const myDigestBtn = document.getElementById('myDigestBtn')
-            if (subtitle) subtitle.innerHTML = `Welcome back, <strong>${data.user.name}</strong>. <a href="/profile" class="text-primary">Edit profile</a> · <a href="/sources" class="text-primary">Manage sources</a>`
-            if (actions) actions.innerHTML = `<a href="/profile" class="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-text hover:border-primary">Profile</a><button onclick="logout()" class="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-text hover:border-primary">Logout</button>`
-            if (myDigestBtn) myDigestBtn.classList.remove('hidden')
-            const forceBtn = document.getElementById('forceDigestBtn')
-            if (forceBtn) forceBtn.classList.remove('hidden')
-            // Load cached same-day digest if available
-            loadMyDigest(false)
-          }
-        }
+        if (!res.ok) return
+        const data = await res.json()
+        if (!data.user) return
+        document.getElementById('myDigestBtn')?.classList.remove('hidden')
+        document.getElementById('forceDigestBtn')?.classList.remove('hidden')
       } catch {}
     }
 
     async function loadMyDigest(force) {
-      const status = document.getElementById('triggerStatus')
-      if (status) status.textContent = force ? 'Rescoring…' : 'Loading your digest…'
+      setStatus(force ? 'Rescoring against your profile…' : 'Generating your digest…')
       try {
         const url = force ? `${apiUrl}/my-digest?force=1` : `${apiUrl}/my-digest`
         const res = await fetch(url, { credentials: 'include' })
         const data = await res.json()
         if (res.ok && data.markdown) {
-          const container = document.getElementById('digestContainer')
-          if (container) {
-            // Server already rendered public/demo; client replaces with personal markdown as text
-            // Full HTML render requires reload after save — force reload for consistency
-            if (status) {
-              const c = data.itemCounts ?? {}
-              status.textContent = data.itemCounts?.cached
-                ? 'Loaded cached digest for today.'
-                : `Done — ${c.scored ?? 0} items (${c.fromCache ?? 0} cached scores, ${c.newlyScored ?? 0} new).`
-            }
-            if (force || !data.itemCounts?.cached) {
-              setTimeout(() => location.reload(), 800)
-            }
-          }
-        } else if (status) {
-          status.textContent = data.error ?? 'No personal digest yet — click Generate.'
+          const c = data.itemCounts ?? {}
+          setStatus(
+            c.cached
+              ? 'Cached digest for today — reloading…'
+              : `Done — ${c.scored ?? 0} items. Reloading…`,
+          )
+          setTimeout(() => location.reload(), 600)
+        } else {
+          setStatus(data.error ?? 'No personal digest yet — try again after adding sources.')
         }
       } catch (e) {
-        if (status) status.textContent = `Error: ${e.message}`
+        setStatus(`Error: ${e.message}`)
       }
     }
 
-    async function logout() {
-      await fetch(`${apiUrl}/auth/logout`, { method: 'POST', credentials: 'include' })
-      location.reload()
-    }
-    window.logout = logout
-
-    // Global pipeline trigger
     document.getElementById('triggerBtn')?.addEventListener('click', async () => {
       const btn = document.getElementById('triggerBtn')
-      const status = document.getElementById('triggerStatus')
-      btn.disabled = true
-      status.textContent = 'Running global pipeline... ~2-5 min'
+      if (btn) btn.setAttribute('disabled', 'true')
+      setStatus('Running global pipeline… this can take a few minutes')
       try {
         const res = await fetch(`${apiUrl}/trigger`, { method: 'POST' })
         const data = await res.json()
         if (data.ok) {
-          status.textContent = `Done — ${data.items} items. Refreshing...`
-          setTimeout(() => location.reload(), 2000)
+          setStatus(`Pipeline done — ${data.items} items. Reloading…`)
+          setTimeout(() => location.reload(), 1500)
         } else {
-          status.textContent = `Failed: ${data.error ?? 'unknown'}`
-          btn.disabled = false
+          setStatus(`Failed: ${data.error ?? 'unknown'}`)
+          if (btn) btn.removeAttribute('disabled')
         }
       } catch (e) {
-        status.textContent = `Error: ${e.message}`
-        btn.disabled = false
+        setStatus(`Error: ${e.message}`)
+        if (btn) btn.removeAttribute('disabled')
       }
     })
 
-    // Per-user digest trigger
     document.getElementById('myDigestBtn')?.addEventListener('click', async () => {
       const btn = document.getElementById('myDigestBtn')
-      if (btn) btn.disabled = true
+      if (btn) btn.setAttribute('disabled', 'true')
       await loadMyDigest(false)
-      if (btn) btn.disabled = false
+      if (btn) btn.removeAttribute('disabled')
     })
+
     document.getElementById('forceDigestBtn')?.addEventListener('click', async () => {
       const btn = document.getElementById('forceDigestBtn')
-      if (btn) btn.disabled = true
+      if (btn) btn.setAttribute('disabled', 'true')
       await loadMyDigest(true)
-      if (btn) btn.disabled = false
+      if (btn) btn.removeAttribute('disabled')
     })
 
     checkAuth()
   </script>
-</Base>
+</AppShell>

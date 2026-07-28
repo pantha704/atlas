@@ -1,0 +1,55 @@
+---
+import Base from './Base.astro'
+import AppNav from '../components/AppNav.astro'
+
+interface Props {
+  title?: string
+  description?: string
+  /** Max width of main content */
+  width?: 'md' | 'lg' | 'xl'
+  /** Hide sticky nav (rare) */
+  hideNav?: boolean
+}
+
+const {
+  title = 'Atlas',
+  description,
+  width = 'lg',
+  hideNav = false,
+} = Astro.props
+
+const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
+
+const widths: Record<string, string> = {
+  md: 'max-w-2xl',
+  lg: 'max-w-4xl',
+  xl: 'max-w-5xl',
+}
+---
+
+<Base title={title} description={description}>
+  <div class="flex min-h-dvh flex-col">
+    {!hideNav && <AppNav apiUrl={API_URL} />}
+    <main
+      id="main-content"
+      class:list={['mx-auto w-full flex-1 px-4 py-8 sm:px-6 sm:py-10', widths[width]]}
+    >
+      <slot />
+    </main>
+    <footer class="border-t border-border">
+      <div
+        class:list={[
+          'mx-auto flex w-full flex-wrap items-center justify-between gap-3 px-4 py-6 text-xs text-text-muted sm:px-6',
+          widths[width],
+        ]}
+      >
+        <span><span class="font-medium text-text">Atlas</span> — personal news agent</span>
+        <div class="flex flex-wrap gap-4">
+          <a href="/docs" class="text-text-muted no-underline hover:text-text">Docs</a>
+          <a href="/legal/privacy" class="text-text-muted no-underline hover:text-text">Privacy</a>
+          <a href="/leaderboard" class="text-text-muted no-underline hover:text-text">Leaderboard</a>
+        </div>
+      </div>
+    </footer>
+  </div>
+</Base>

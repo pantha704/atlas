@@ -1,0 +1,37 @@
+---
+interface Props {
+  title: string
+  description?: string
+  class?: string
+}
+
+const { title, description, class: className = '' } = Astro.props
+---
+
+<div
+  class:list={[
+    'flex flex-col items-center justify-center rounded-lg border border-dashed border-border bg-surface-2/50 px-6 py-14 text-center',
+    className,
+  ]}
+  role="status"
+>
+  <div
+    class="mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-border bg-surface text-text-muted"
+    aria-hidden="true"
+  >
+    <slot name="icon">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+        <path d="M4 6h16M4 12h10M4 18h14" stroke-linecap="round"></path>
+      </svg>
+    </slot>
+  </div>
+  <h3 class="text-base font-medium text-text">{title}</h3>
+  {
+    description && (
+      <p class="mt-2 max-w-sm text-sm text-text-muted">{description}</p>
+    )
+  }
+  <div class="mt-6 flex flex-wrap items-center justify-center gap-3">
+    <slot name="actions" />
+  </div>
+</div>

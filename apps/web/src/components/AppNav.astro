@@ -1,0 +1,118 @@
+---
+interface Props {
+  apiUrl?: string
+}
+
+const { apiUrl = '/api' } = Astro.props
+const path = Astro.url.pathname
+
+const links = [
+  { href: '/dashboard', label: 'Digest', match: (p: string) => p.startsWith('/dashboard') },
+  { href: '/sources', label: 'Sources', match: (p: string) => p.startsWith('/sources') },
+  { href: '/market', label: 'Market', match: (p: string) => p.startsWith('/market') },
+  { href: '/profile', label: 'Profile', match: (p: string) => p.startsWith('/profile') },
+]
+
+function isActive(href: string, match: (p: string) => boolean) {
+  if (path === href) return true
+  return match(path)
+}
+---
+
+<header class="sticky top-0 z-40 border-b border-border bg-bg/80 backdrop-blur-md">
+  <div class="mx-auto flex h-14 max-w-5xl items-center justify-between gap-4 px-4 sm:px-6">
+    <div class="flex items-center gap-6 min-w-0">
+      <a
+        href="/dashboard"
+        class="flex shrink-0 items-center gap-2 text-text no-underline hover:text-text"
+        aria-label="Atlas home"
+      >
+        <span
+          class="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-[11px] font-semibold text-white"
+          aria-hidden="true"
+        >
+          A
+        </span>
+        <span class="hidden text-sm font-medium tracking-tight sm:inline">Atlas</span>
+      </a>
+
+      <nav class="flex items-center gap-0.5 overflow-x-auto" aria-label="Main">
+        {
+          links.map((link) => {
+            const active = isActive(link.href, link.match)
+            return (
+              <a
+                href={link.href}
+                class:list={[
+                  'nav-link rounded-md px-2.5 py-1.5 text-sm no-underline transition-colors',
+                  active
+                    ? 'bg-surface-2 text-text'
+                    : 'text-text-muted hover:bg-surface-2/70 hover:text-text',
+                ]}
+                aria-current={active ? 'page' : undefined}
+              >
+                {link.label}
+              </a>
+            )
+          })
+        }
+      </nav>
+    </div>
+
+    <div class="flex items-center gap-2 shrink-0">
+      <span id="nav-plan-badge" class="hidden sm:inline-flex"></span>
+      <div id="nav-auth" class="flex items-center gap-2">
+        <a
+          href="/signup"
+          class="inline-flex h-8 items-center rounded-md bg-primary px-3 text-xs font-medium text-white no-underline hover:bg-primary-hover"
+        >
+          Sign in
+        </a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<script is:inline define:vars={{ apiUrl }}>
+  ;(async function hydrateNav() {
+    const authEl = document.getElementById('nav-auth')
+    const planEl = document.getElementById('nav-plan-badge')
+    if (!authEl) return
+    try {
+      const res = await fetch(`${apiUrl}/auth/me`, { credentials: 'include' })
+      if (!res.ok) return
+      const data = await res.json()
+      if (!data.user) return
+
+      const name = data.user.name || data.user.email || 'You'
+      const plan = data.user.plan || 'free'
+      const initial = String(name).trim().charAt(0).toUpperCase() || 'U'
+
+      if (planEl) {
+        planEl.className =
+          'inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium tracking-wide ' +
+          (plan === 'pro'
+            ? 'border-primary/30 bg-primary/15 text-primary'
+            : 'border-border bg-surface-2 text-text-muted')
+        planEl.textContent = plan === 'pro' ? 'Pro' : 'Free'
+        planEl.classList.remove('hidden')
+      }
+
+      authEl.innerHTML = `
+        <a href="/profile" class="flex items-center gap-2 rounded-md px-1.5 py-1 no-underline hover:bg-surface-2" title="Profile">
+          <span class="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-surface text-xs font-medium text-text">${initial}</span>
+          <span class="hidden max-w-[8rem] truncate text-sm text-text md:inline">${name}</span>
+        </a>
+        <button type="button" id="nav-logout" class="inline-flex h-8 items-center rounded-md border border-border bg-surface px-2.5 text-xs font-medium text-text-muted hover:border-primary/40 hover:text-text">
+          Log out
+        </button>
+      `
+      document.getElementById('nav-logout')?.addEventListener('click', async () => {
+        await fetch(`${apiUrl}/auth/logout`, { method: 'POST', credentials: 'include' })
+        location.href = '/'
+      })
+    } catch {
+      /* guest — keep sign in */
+    }
+  })()
+</script>

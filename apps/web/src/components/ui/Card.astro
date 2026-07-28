@@ -1,0 +1,29 @@
+---
+interface Props {
+  class?: string
+  padding?: 'none' | 'sm' | 'md' | 'lg'
+  hover?: boolean
+}
+
+const { class: className = '', padding = 'md', hover = false } = Astro.props
+
+const pads: Record<string, string> = {
+  none: '',
+  sm: 'p-4',
+  md: 'p-6',
+  lg: 'p-8',
+}
+
+const cls = [
+  'atlas-card',
+  pads[padding],
+  hover ? 'transition-colors duration-150 hover:border-primary/40' : '',
+  className,
+]
+  .filter(Boolean)
+  .join(' ')
+---
+
+<div class={cls}>
+  <slot />
+</div>

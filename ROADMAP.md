@@ -13,7 +13,7 @@
 | Billing | ✅ Stripe Checkout + webhook (needs keys) |
 | Source market | ✅ thin (list/submit/add) |
 | Teams / badges / leaderboard | ⚠️ API-level; UX thin |
-| UI polish (React/shadcn) | ❌ still plain Astro |
+| UI polish (shell + kit) | ✅ AppShell, UI kit, digest polish (no React yet) |
 | PostHog / Sentry wired | ✅ server-side (env optional) |
 | Globe / geo map | ❌ **none** (not in product) |
 
@@ -69,8 +69,9 @@
 - Landing, docs, legal, share, referral UI ✅
 - Stripe ✅ (configure keys)
 - PostHog + Sentry wiring ✅ (signup/digest/feedback + onError; no-op without keys)
-- Lighthouse / a11y pass ❌
-- React islands + shadcn ❌
+- App shell + UI kit + dashboard polish ✅
+- Lighthouse / a11y pass ⚠️ started (skip link, focus rings, live regions)
+- React islands + shadcn ❌ (not required for density)
 
 ## v0.7 — Growth (partial)
 

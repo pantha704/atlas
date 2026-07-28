@@ -1,21 +1,23 @@
 ---
-import Base from '../layouts/Base.astro'
+import Button from '../components/ui/Button.astro'
+import PageHeader from '../components/ui/PageHeader.astro'
+import AppShell from '../layouts/AppShell.astro'
 
 const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
 ---
 
-<Base title="Source Market — Atlas">
-  <main class="mx-auto max-w-4xl px-6 py-12">
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-3xl font-bold text-text">Source market</h1>
-        <p class="mt-2 text-text-muted">Community-curated sources. Add them to your Atlas in one click.</p>
-      </div>
-      <a href="/market/submit" class="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-hover">Submit source</a>
-    </div>
+<AppShell title="Source Market — Atlas" description="Community-curated sources">
+  <PageHeader
+    title="Source market"
+    description="Community-curated sources. Add them to your Atlas in one click."
+  >
+    <Fragment slot="actions">
+      <Button href="/market/submit" variant="primary" size="sm">Submit source</Button>
+    </Fragment>
+  </PageHeader>
 
-    <div class="mt-8 flex gap-4">
-      <select id="filter-type" class="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text">
+    <div class="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
+      <select id="filter-type" class="rounded-md border border-border bg-surface px-3 py-2 text-sm text-text">
         <option value="">All types</option>
         <option value="hackernews">Hacker News</option>
         <option value="rss">RSS</option>
@@ -25,19 +27,20 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
         <option value="telegram">Telegram</option>
         <option value="ossinsight">OSS Insight</option>
       </select>
-      <select id="sort-by" class="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text">
+      <select id="sort-by" class="rounded-md border border-border bg-surface px-3 py-2 text-sm text-text">
         <option value="latest">Latest</option>
         <option value="users">Most users</option>
         <option value="quality">Highest quality</option>
         <option value="snr">Best signal</option>
       </select>
-      <input id="search" type="text" placeholder="Search..." class="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-text-muted focus:border-primary focus:outline-none" />
+      <input id="search" type="search" placeholder="Search…" class="w-full flex-1 rounded-md border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-text-muted" />
     </div>
 
-    <div id="market-grid" class="mt-8 grid gap-4 sm:grid-cols-2">
-      <p class="text-text-muted col-span-2">Loading sources...</p>
+    <div id="market-grid" class="mt-8 grid gap-3 sm:grid-cols-2">
+      <div class="atlas-skeleton h-28 col-span-2 sm:col-span-1" aria-hidden="true"></div>
+      <div class="atlas-skeleton h-28 col-span-2 sm:col-span-1" aria-hidden="true"></div>
+      <p class="sr-only">Loading sources…</p>
     </div>
-  </main>
 
   <script is:inline define:vars={{ apiUrl: API_URL }}>
     let allSources = []
@@ -73,12 +76,12 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
         return
       }
       grid.innerHTML = filtered.map(s => `
-        <a href="/market/source?id=${s.id}" class="block rounded-lg border border-border bg-surface p-4 hover:border-primary transition-colors">
-          <div class="flex items-center gap-2">
-            <span class="text-xs font-mono px-2 py-0.5 rounded bg-surface-2 text-text-muted">${esc(s.type)}</span>
-            ${s.fieldTags ? s.fieldTags.split(',').slice(0, 3).map(t => `<span class="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary">${esc(t.trim())}</span>`).join('') : ''}
+        <a href="/market/source?id=${s.id}" class="atlas-card block p-4 no-underline transition-colors hover:border-primary/40">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <span class="text-[11px] font-mono px-2 py-0.5 rounded-md border border-border bg-surface-2 text-text-muted">${esc(s.type)}</span>
+            ${s.fieldTags ? s.fieldTags.split(',').slice(0, 3).map(t => `<span class="text-[11px] px-2 py-0.5 rounded-full border border-primary/25 bg-primary/10 text-primary">${esc(t.trim())}</span>`).join('') : ''}
           </div>
-          <h3 class="mt-2 text-lg font-semibold text-text">${esc(s.name)}</h3>
+          <h3 class="mt-2.5 text-base font-medium text-text">${esc(s.name)}</h3>
           ${s.bio ? `<p class="mt-1 text-sm text-text-muted line-clamp-2">${esc(s.bio)}</p>` : ''}
           <div class="mt-3 flex gap-4 text-xs text-text-muted">
             <span>${s.userCount} users</span>
@@ -101,4 +104,4 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
 
     loadMarket()
   </script>
-</Base>
+</AppShell>

@@ -20,11 +20,19 @@ const {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
+    <meta name="theme-color" content="#08090a" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f7f8f8" media="(prefers-color-scheme: light)" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..700&family=JetBrains+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
     <title>{title}</title>
     <script is:inline>
-      // ponytail: inline theme bootstrap to avoid FOUC; reads localStorage before paint
-      (() => {
+      // Theme before paint — avoid FOUC
+      ;(() => {
         const t = localStorage.getItem('atlas-theme')
         if (t === 'dark' || t === 'light') {
           document.documentElement.setAttribute('data-theme', t)
@@ -32,25 +40,35 @@ const {
       })()
     </script>
   </head>
-  <body>
+  <body class="min-h-dvh antialiased">
+    <a
+      href="#main-content"
+      class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:text-white"
+    >
+      Skip to content
+    </a>
     <slot />
     <button
       id="theme-toggle"
-      aria-label="Toggle theme"
-      class="fixed bottom-4 right-4 rounded-md border border-border bg-surface px-3 py-2 text-sm text-text-muted hover:text-text"
+      type="button"
+      aria-label="Toggle color theme"
+      title="Toggle theme"
+      class="fixed bottom-4 right-4 z-50 flex h-9 w-9 items-center justify-center rounded-md border border-border bg-surface text-sm text-text-muted shadow-sm transition-colors hover:border-primary/40 hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
     >
-      ◐
+      <span aria-hidden="true">◐</span>
     </button>
     <script is:inline>
-      const btn = document.getElementById('theme-toggle')
-      btn?.addEventListener('click', () => {
-        const cur = document.documentElement.getAttribute('data-theme')
-        const isDark = cur === 'dark' ||
-          (!cur && window.matchMedia('(prefers-color-scheme: dark)').matches)
-        const next = isDark ? 'light' : 'dark'
-        document.documentElement.setAttribute('data-theme', next)
-        localStorage.setItem('atlas-theme', next)
-      })
+      ;(() => {
+        const btn = document.getElementById('theme-toggle')
+        btn?.addEventListener('click', () => {
+          const cur = document.documentElement.getAttribute('data-theme')
+          const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+          const isDark = cur === 'dark' || (!cur && prefersDark)
+          const next = isDark ? 'light' : 'dark'
+          document.documentElement.setAttribute('data-theme', next)
+          localStorage.setItem('atlas-theme', next)
+        })
+      })()
     </script>
   </body>
 </html>

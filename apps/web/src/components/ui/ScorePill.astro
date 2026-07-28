@@ -1,0 +1,15 @@
+---
+interface Props {
+  score: number
+  class?: string
+}
+
+const { score, class: className = '' } = Astro.props
+
+const tier = score >= 9 ? 'high' : score >= 7 ? 'good' : score >= 5 ? 'mid' : 'low'
+const label = Number.isInteger(score) ? String(score) : score.toFixed(1)
+---
+
+<span class:list={['score-badge', className]} data-tier={tier} title={`Score ${label}/10`}>
+  {label}
+</span>

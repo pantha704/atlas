@@ -1,17 +1,20 @@
 ---
-import Base from '../layouts/Base.astro'
+import Button from '../components/ui/Button.astro'
+import Card from '../components/ui/Card.astro'
+import PageHeader from '../components/ui/PageHeader.astro'
+import AppShell from '../layouts/AppShell.astro'
 
 const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
 ---
 
-<Base title="Profile — Atlas">
-  <main class="mx-auto max-w-2xl px-6 py-12">
-    <h1 class="text-3xl font-bold text-text">Your profile</h1>
-    <p class="mt-2 text-text-muted">
-      Atlas scores every item against this. The more you use it, the sharper it gets.
-    </p>
+<AppShell title="Profile — Atlas" description="Your scoring profile and plan" width="md">
+  <PageHeader
+    title="Your profile"
+    description="Atlas scores every item against this. Feedback makes it sharper."
+  />
 
-    <form id="profile-form" class="mt-8 space-y-6">
+    <Card class="mt-8">
+    <form id="profile-form" class="space-y-6">
       <div>
         <label for="interests" class="block text-sm font-medium text-text">What do you work on?</label>
         <textarea
@@ -56,39 +59,39 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
         <p class="mt-1 text-xs text-text-muted">Higher = fewer items, more curated. Lower = more items, more noise.</p>
       </div>
 
-      <button
-        type="submit"
-        class="rounded-lg bg-primary px-6 py-3 font-semibold text-white hover:bg-primary-hover"
-      >
-        Save profile
-      </button>
-      <span id="save-status" class="ml-4 text-sm text-text-muted"></span>
+      <div class="flex flex-wrap items-center gap-3">
+        <Button type="submit" variant="primary" size="md">Save profile</Button>
+        <span id="save-status" class="text-sm text-text-muted" aria-live="polite"></span>
+      </div>
     </form>
+    </Card>
 
     <!-- Plan + billing -->
-    <div class="mt-12 rounded-lg border border-border bg-surface p-6">
-      <div class="flex items-center justify-between gap-4">
+    <Card class="mt-8">
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 class="text-lg font-semibold text-text">Plan</h2>
+          <h2 class="text-base font-medium text-text">Plan</h2>
           <p id="plan-label" class="mt-1 text-sm text-text-muted">Loading…</p>
         </div>
-        <button
+        <Button
           id="upgrade-btn"
           type="button"
-          class="hidden rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-hover"
+          variant="primary"
+          size="sm"
+          class="hidden"
         >
           Upgrade to Pro — $8/mo
-        </button>
+        </Button>
       </div>
       <p class="mt-3 text-xs text-text-muted">
         Free: 10 sources, web digest, top-3 impact. Pro: unlimited sources, email/RSS/webhook, top-10 impact.
       </p>
-      <span id="billing-status" class="mt-2 block text-sm text-text-muted"></span>
-    </div>
+      <span id="billing-status" class="mt-2 block text-sm text-text-muted" aria-live="polite"></span>
+    </Card>
 
     <!-- Delivery preferences — v0.4 (Pro for email/RSS/webhook) -->
-    <div class="mt-12">
-      <h2 class="text-lg font-semibold text-text">Delivery</h2>
+    <Card class="mt-8">
+      <h2 class="text-base font-medium text-text">Delivery</h2>
       <p class="mt-1 text-sm text-text-muted">
         Email, RSS, and webhooks are <strong class="text-text">Pro</strong>. Free plan: web dashboard only.
       </p>
@@ -116,24 +119,20 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
         </div>
       </div>
 
-      <button
-        id="save-delivery"
-        class="mt-4 rounded-lg bg-primary px-6 py-3 font-semibold text-white hover:bg-primary-hover"
-      >
-        Save delivery
-      </button>
-      <span id="delivery-status" class="ml-4 text-sm text-text-muted"></span>
-    </div>
+      <div class="mt-4 flex flex-wrap items-center gap-3">
+        <Button id="save-delivery" type="button" variant="primary" size="sm">Save delivery</Button>
+        <span id="delivery-status" class="text-sm text-text-muted" aria-live="polite"></span>
+      </div>
+    </Card>
 
     <!-- Tag weights (learned from feedback) -->
-    <div class="mt-12">
-      <h2 class="text-lg font-semibold text-text">Topics you care about</h2>
-      <p class="mt-1 text-sm text-text-muted">Learned from your feedback. Upvote = boost, downvote = reduce.</p>
+    <Card class="mt-8">
+      <h2 class="text-base font-medium text-text">Topics you care about</h2>
+      <p class="mt-1 text-sm text-text-muted">Learned from feedback. Upvote boosts; downvote reduces.</p>
       <div id="tag-weights" class="mt-4 flex flex-wrap gap-2">
-        <span class="text-sm text-text-muted">No feedback yet. Upvote or downvote items in your digest to teach Atlas.</span>
+        <span class="text-sm text-text-muted">No feedback yet. Rate items in your digest to teach Atlas.</span>
       </div>
-    </div>
-  </main>
+    </Card>
 
   <script is:inline define:vars={{ apiUrl: API_URL }}>
     let currentPlan = 'free'
@@ -296,4 +295,4 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
 
     loadDelivery()
   </script>
-</Base>
+</AppShell>
