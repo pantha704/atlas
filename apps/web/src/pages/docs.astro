@@ -3,77 +3,76 @@ import AppShell from '../layouts/AppShell.astro'
 ---
 
 <AppShell title="Docs — Atlas" description="Run and contribute to Atlas" width="md">
-    <h1 class="text-2xl font-medium tracking-tight text-text sm:text-3xl">Documentation</h1>
-    <p class="mt-2 text-text-muted">Everything you need to run and contribute to Atlas.</p>
+  <h1 class="text-2xl font-medium tracking-tight text-text sm:text-3xl">Documentation</h1>
+  <p class="mt-2 text-sm text-text-muted">Everything you need to run and contribute to Atlas.</p>
 
-    <div class="mt-8 space-y-8">
-      <section>
-        <h2 class="text-xl font-semibold text-text">Quick start</h2>
-        <div class="mt-4 rounded-lg border border-border bg-surface p-4 font-mono text-sm text-text">
-          <p>git clone https://github.com/pantha704/atlas.git</p>
-          <p>cd atlas</p>
-          <p>bun install</p>
-          <p>cp .env.example .env  # fill in GROQ_API_KEY</p>
-          <p>bun dev</p>
-        </div>
-      </section>
+  <div class="mt-8 space-y-10">
+    <section aria-labelledby="quick-start">
+      <h2 id="quick-start" class="text-lg font-medium text-text">Quick start</h2>
+      <div class="mt-4 rounded-md border border-border bg-surface p-4 font-mono text-sm text-text">
+        <p>git clone https://github.com/pantha704/atlas.git</p>
+        <p>cd atlas</p>
+        <p>bun install</p>
+        <p>cp .env.example .env</p>
+        <p>bun dev</p>
+      </div>
+    </section>
 
-      <section>
-        <h2 class="text-xl font-semibold text-text">Environment variables</h2>
-        <div class="mt-4 space-y-2 text-sm text-text-muted">
-          <p><code class="font-mono bg-surface-2 px-1 rounded">GROQ_API_KEY</code> — Primary AI (free tier: 14k req/day)</p>
-          <p><code class="font-mono bg-surface-2 px-1 rounded">GEMINI_API_KEY</code> — AI fallback (free tier: 1.5k req/day)</p>
-          <p><code class="font-mono bg-surface-2 px-1 rounded">GITHUB_CLIENT_ID</code> / <code class="font-mono bg-surface-2 px-1 rounded">GITHUB_CLIENT_SECRET</code> — OAuth</p>
-          <p><code class="font-mono bg-surface-2 px-1 rounded">TURSO_DATABASE_URL</code> / <code class="font-mono bg-surface-2 px-1 rounded">TURSO_AUTH_TOKEN</code> — Database</p>
-          <p><code class="font-mono bg-surface-2 px-1 rounded">BETTER_AUTH_SECRET</code> — JWT signing (generate: <code class="font-mono">openssl rand -base64 32</code>)</p>
-          <p><code class="font-mono bg-surface-2 px-1 rounded">RESEND_API_KEY</code> — Email delivery (optional, free tier: 100/day)</p>
-        </div>
-      </section>
+    <section aria-labelledby="env-vars">
+      <h2 id="env-vars" class="text-lg font-medium text-text">Environment variables</h2>
+      <div class="mt-4 space-y-2 text-sm text-text-muted">
+        <p><code class="rounded bg-surface-2 px-1 font-mono text-text">TURSO_DATABASE_URL</code> / <code class="rounded bg-surface-2 px-1 font-mono text-text">TURSO_AUTH_TOKEN</code> — Database</p>
+        <p><code class="rounded bg-surface-2 px-1 font-mono text-text">GROQ_API_KEY</code> — Primary AI · <code class="rounded bg-surface-2 px-1 font-mono text-text">GEMINI_API_KEY</code> fallback</p>
+        <p><code class="rounded bg-surface-2 px-1 font-mono text-text">GITHUB_CLIENT_ID</code> / <code class="rounded bg-surface-2 px-1 font-mono text-text">GITHUB_CLIENT_SECRET</code> — OAuth</p>
+        <p><code class="rounded bg-surface-2 px-1 font-mono text-text">BETTER_AUTH_SECRET</code> — JWT signing (<code class="font-mono">openssl rand -base64 32</code>)</p>
+        <p><code class="rounded bg-surface-2 px-1 font-mono text-text">CRON_SECRET</code> — Protect <code class="font-mono">/api/cron/fetch</code></p>
+        <p><code class="rounded bg-surface-2 px-1 font-mono text-text">RAZORPAY_KEY_ID</code> / <code class="rounded bg-surface-2 px-1 font-mono text-text">RAZORPAY_KEY_SECRET</code> — Pro billing</p>
+        <p><code class="rounded bg-surface-2 px-1 font-mono text-text">RAZORPAY_PLAN_ID</code> — optional recurring plan · else payment link (₹699)</p>
+        <p><code class="rounded bg-surface-2 px-1 font-mono text-text">RAZORPAY_WEBHOOK_SECRET</code> — webhook HMAC · URL <code class="font-mono">/api/billing/webhook</code></p>
+        <p><code class="rounded bg-surface-2 px-1 font-mono text-text">POSTHOG_KEY</code> / <code class="rounded bg-surface-2 px-1 font-mono text-text">SENTRY_DSN</code> — optional observability</p>
+        <p><code class="rounded bg-surface-2 px-1 font-mono text-text">RESEND_API_KEY</code> — Pro email delivery</p>
+      </div>
+    </section>
 
-      <section>
-        <h2 class="text-xl font-semibold text-text">Self-host guide</h2>
-        <ol class="mt-4 space-y-4 text-sm text-text-muted list-decimal ml-4">
-          <li>
-            <strong class="text-text">Create a Turso database</strong> — sign up at <a href="https://turso.tech">turso.tech</a>, create a database, copy the URL and auth token.
-          </li>
-          <li>
-            <strong class="text-text">Create a GitHub OAuth app</strong> — go to <a href="https://github.com/settings/developers">github.com/settings/developers</a>, set callback URL to <code class="font-mono bg-surface-2 px-1 rounded">https://your-domain.com/api/auth/callback</code>.
-          </li>
-          <li>
-            <strong class="text-text">Get a Groq API key</strong> — sign up at <a href="https://console.groq.com">console.groq.com</a>, create an API key (free tier: 14k req/day).
-          </li>
-          <li>
-            <strong class="text-text">Deploy to Vercel</strong> — import the repo, set Root Directory to <code class="font-mono bg-surface-2 px-1 rounded">apps/web</code>, framework auto-detects Astro.
-          </li>
-          <li>
-            <strong class="text-text">Set environment variables</strong> — in Vercel project settings, add all secrets from <code class="font-mono bg-surface-2 px-1 rounded">.env.example</code> for Production.
-          </li>
-          <li>
-            <strong class="text-text">Run migrations</strong> — <code class="font-mono bg-surface-2 px-1 rounded">cd packages/db && bun run migrate</code>.
-          </li>
-          <li>
-            <strong class="text-text">Deploy web</strong> — same Vercel project serves both the Astro frontend and the API catch-all at <code class="font-mono bg-surface-2 px-1 rounded">/api/*</code>.
-          </li>
-        </ol>
-        <p class="mt-4 text-sm text-text-muted">Total time: ~15 minutes. Total cost: $0 (all free tiers).</p>
-      </section>
+    <section aria-labelledby="self-host">
+      <h2 id="self-host" class="text-lg font-medium text-text">Self-host (Vercel + Turso)</h2>
+      <ol class="mt-4 list-decimal space-y-3 pl-5 text-sm text-text-muted">
+        <li>
+          <strong class="text-text">Turso</strong> — create a DB, copy URL + token. Run migrations:
+          <code class="rounded bg-surface-2 px-1 font-mono text-text">cd packages/db && bun run migrate</code>
+          (includes <code class="font-mono">0007_score_cache_billing</code>).
+        </li>
+        <li>
+          <strong class="text-text">GitHub OAuth</strong> — callback
+          <code class="rounded bg-surface-2 px-1 font-mono text-text">https://your-domain.com/api/auth/callback</code>.
+        </li>
+        <li>
+          <strong class="text-text">Vercel</strong> — import monorepo, set envs from
+          <code class="font-mono">.env.example</code>, deploy. API is
+          <code class="font-mono">/api/*</code> via Astro catch-all.
+        </li>
+        <li>
+          <strong class="text-text">Cron</strong> — <code class="font-mono">vercel.json</code> hits
+          <code class="font-mono">/api/cron/fetch</code> daily; set
+          <code class="font-mono">CRON_SECRET</code>.
+        </li>
+        <li>
+          <strong class="text-text">Razorpay</strong> — create keys; optional Plan for subscriptions;
+          webhook to <code class="font-mono">/api/billing/webhook</code> with secret.
+        </li>
+      </ol>
+      <p class="mt-4 text-sm text-text-muted">Typical setup: ~15 minutes on free tiers.</p>
+    </section>
 
-      <section>
-        <h2 class="text-xl font-semibold text-text">Source configuration</h2>
-        <p class="mt-2 text-sm text-text-muted">See <a href="/market">Source Market</a> for pre-configured sources, or configure custom sources in your <a href="/sources">sources page</a>.</p>
-      </section>
-
-      <section>
-        <h2 class="text-xl font-semibold text-text">API reference</h2>
-        <div class="mt-4 space-y-2 text-sm text-text-muted">
-          <p><code class="font-mono bg-surface-2 px-1 rounded">GET /health</code> — Health check</p>
-          <p><code class="font-mono bg-surface-2 px-1 rounded">GET /digest</code> — Public global digest</p>
-          <p><code class="font-mono bg-surface-2 px-1 rounded">POST /trigger</code> — Trigger global pipeline</p>
-          <p><code class="font-mono bg-surface-2 px-1 rounded">GET /my-digest</code> — Per-user digest (auth)</p>
-          <p><code class="font-mono bg-surface-2 px-1 rounded">GET /market</code> — Source market listing</p>
-          <p><code class="font-mono bg-surface-2 px-1 rounded">GET /rss/:token.xml</code> — Per-user RSS feed</p>
-          <p><code class="font-mono bg-surface-2 px-1 rounded">GET /share/:slug</code> — Shared digest</p>
-        </div>
-      </section>
-    </div>
+    <section aria-labelledby="api-ref">
+      <h2 id="api-ref" class="text-lg font-medium text-text">API reference</h2>
+      <div class="mt-4 space-y-2 text-sm text-text-muted">
+        <p><code class="rounded bg-surface-2 px-1 font-mono text-text">GET /health</code> — Health + billing configured flag</p>
+        <p><code class="rounded bg-surface-2 px-1 font-mono text-text">GET /digest</code> · <code class="rounded bg-surface-2 px-1 font-mono text-text">GET /demo/digest</code></p>
+        <p><code class="rounded bg-surface-2 px-1 font-mono text-text">GET /my-digest</code> · <code class="rounded bg-surface-2 px-1 font-mono text-text">?peek=1</code> cache-only · <code class="rounded bg-surface-2 px-1 font-mono text-text">?force=1</code> rescore</p>
+        <p><code class="rounded bg-surface-2 px-1 font-mono text-text">POST /billing/checkout</code> · <code class="rounded bg-surface-2 px-1 font-mono text-text">POST /billing/webhook</code> (Razorpay)</p>
+        <p><code class="rounded bg-surface-2 px-1 font-mono text-text">GET /market</code> · <code class="rounded bg-surface-2 px-1 font-mono text-text">POST /feedback</code> · <code class="rounded bg-surface-2 px-1 font-mono text-text">GET /rss/:token.xml</code></p>
+      </div>
+    </section>
+  </div>
 </AppShell>

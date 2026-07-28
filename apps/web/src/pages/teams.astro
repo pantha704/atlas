@@ -1,0 +1,143 @@
+---
+import Button from '../components/ui/Button.astro'
+import Card from '../components/ui/Card.astro'
+import PageHeader from '../components/ui/PageHeader.astro'
+import AppShell from '../layouts/AppShell.astro'
+
+const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
+---
+
+<AppShell title="Teams — Atlas" description="Lightweight team workspaces" width="md">
+  <PageHeader
+    title="Teams"
+    description="Create a team, invite members. Shared digests ship in a later release."
+  />
+
+  <Card class="mt-8" padding="md">
+    <label for="team-name" class="block text-sm font-medium text-text">New team</label>
+    <div class="mt-2 flex flex-col gap-2 sm:flex-row">
+      <input
+        id="team-name"
+        type="text"
+        placeholder="e.g. Research squad"
+        class="w-full flex-1 rounded-md border border-border bg-surface px-3 py-2 text-sm text-text placeholder:text-text-muted"
+      />
+      <Button id="create-team" type="button" variant="primary" size="sm">Create</Button>
+    </div>
+    <p id="team-status" class="mt-2 text-xs text-text-muted" aria-live="polite"></p>
+  </Card>
+
+  <div id="teams-list" class="mt-8 space-y-2" aria-live="polite">
+    <div class="atlas-skeleton h-16 w-full" aria-hidden="true"></div>
+    <p class="sr-only">Loading teams…</p>
+  </div>
+
+  <script is:inline define:vars={{ apiUrl: API_URL }}>
+    async function loadTeams() {
+      const el = document.getElementById('teams-list')
+      try {
+        const res = await fetch(`${apiUrl}/teams`, { credentials: 'include' })
+        if (res.status === 401) {
+          el.innerHTML = `<div class="atlas-banner" data-tone="info">Please <a href="/signup" class="text-primary">sign in</a> to manage teams.</div>`
+          return
+        }
+        if (!res.ok) throw new Error('Failed to load teams')
+        const data = await res.json()
+        const list = data.teams ?? []
+        if (!list.length) {
+          el.innerHTML = `<div class="flex flex-col items-center rounded-lg border border-dashed border-border bg-surface-2/50 px-6 py-12 text-center">
+            <p class="text-sm font-medium text-text">No teams yet</p>
+            <p class="mt-1 text-sm text-text-muted">Create one above. Invites use member user ids for now.</p>
+          </div>`
+          return
+        }
+        el.innerHTML = list
+          .map(
+            (t) => `
+          <div class="atlas-card flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p class="text-sm font-medium text-text">${esc(t.name)}</p>
+              <p class="text-xs text-text-muted font-mono">${esc(t.id.slice(0, 8))}…</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <input data-invite-for="${esc(t.id)}" type="text" placeholder="User id to invite"
+                class="h-8 w-40 rounded-md border border-border bg-surface px-2 text-xs text-text" />
+              <button type="button" data-team-invite="${esc(t.id)}"
+                class="h-8 rounded-md border border-border bg-surface px-3 text-xs font-medium text-text hover:border-primary/50">
+                Invite
+              </button>
+            </div>
+          </div>`,
+          )
+          .join('')
+
+        el.querySelectorAll('[data-team-invite]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const teamId = btn.getAttribute('data-team-invite')
+            const input = el.querySelector(`[data-invite-for="${teamId}"]`)
+            const userId = input?.value?.trim()
+            const status = document.getElementById('team-status')
+            if (!userId) {
+              if (status) status.textContent = 'Enter a user id to invite.'
+              return
+            }
+            if (status) status.textContent = 'Inviting…'
+            try {
+              const r = await fetch(`${apiUrl}/teams/${teamId}/invite`, {
+                method: 'POST',
+                credentials: 'include',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId }),
+              })
+              const d = await r.json().catch(() => ({}))
+              if (!r.ok) throw new Error(d.error ?? 'Invite failed')
+              if (status) status.textContent = 'Member invited.'
+              if (input) input.value = ''
+            } catch (e) {
+              if (status) status.textContent = `Error: ${e.message}`
+            }
+          })
+        })
+      } catch (e) {
+        el.innerHTML = `<div class="atlas-banner" data-tone="warn">Error: ${esc(e.message)}</div>`
+      }
+    }
+
+    document.getElementById('create-team')?.addEventListener('click', async () => {
+      const name = document.getElementById('team-name')?.value?.trim()
+      const status = document.getElementById('team-status')
+      if (!name) {
+        if (status) status.textContent = 'Team name required.'
+        return
+      }
+      if (status) status.textContent = 'Creating…'
+      try {
+        const res = await fetch(`${apiUrl}/teams`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name }),
+        })
+        if (res.status === 401) {
+          location.href = '/signup'
+          return
+        }
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error ?? 'Failed')
+        if (status) status.textContent = 'Team created.'
+        document.getElementById('team-name').value = ''
+        loadTeams()
+      } catch (e) {
+        if (status) status.textContent = `Error: ${e.message}`
+      }
+    })
+
+    function esc(s) {
+      const d = document.createElement('div')
+      d.textContent = s ?? ''
+      return d.innerHTML
+    }
+
+    loadTeams()
+  </script>
+</AppShell>

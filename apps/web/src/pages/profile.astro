@@ -80,11 +80,12 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
           size="sm"
           class="hidden"
         >
-          Upgrade to Pro — $8/mo
+          Upgrade to Pro — ₹699/mo
         </Button>
       </div>
       <p class="mt-3 text-xs text-text-muted">
         Free: 10 sources, web digest, top-3 impact. Pro: unlimited sources, email/RSS/webhook, top-10 impact.
+        Billed via Razorpay (INR). Subscription plan when configured; otherwise 30-day payment link.
       </p>
       <span id="billing-status" class="mt-2 block text-sm text-text-muted" aria-live="polite"></span>
     </Card>
@@ -158,9 +159,23 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
       } catch {}
     }
 
+    // Razorpay return params
+    ;(function showBillingFlash() {
+      const q = new URLSearchParams(location.search)
+      const billing = q.get('billing')
+      const status = document.getElementById('billing-status')
+      if (!status || !billing) return
+      if (billing === 'success') {
+        status.textContent = 'Payment received — refreshing plan…'
+        setTimeout(() => location.replace('/profile'), 1200)
+      } else if (billing === 'cancel') {
+        status.textContent = 'Checkout cancelled.'
+      }
+    })()
+
     document.getElementById('upgrade-btn')?.addEventListener('click', async () => {
       const status = document.getElementById('billing-status')
-      if (status) status.textContent = 'Opening Stripe Checkout…'
+      if (status) status.textContent = 'Opening Razorpay Checkout…'
       try {
         const res = await fetch(`${apiUrl}/billing/checkout`, {
           method: 'POST',
@@ -168,7 +183,10 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
         })
         const data = await res.json()
         if (res.status === 501) {
-          if (status) status.textContent = 'Billing not configured yet (missing Stripe keys).'
+          if (status) {
+            status.textContent =
+              'Billing not configured yet (set RAZORPAY_KEY_ID + RAZORPAY_KEY_SECRET).'
+          }
           return
         }
         if (!res.ok || !data.url) throw new Error(data.error ?? 'Checkout failed')

@@ -3,9 +3,30 @@ import Button from '../components/ui/Button.astro'
 import Card from '../components/ui/Card.astro'
 import Badge from '../components/ui/Badge.astro'
 import Base from '../layouts/Base.astro'
+
+const site = Astro.site?.href?.replace(/\/$/, '') ?? 'https://atlas-nine-ashy.vercel.app'
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'Atlas',
+  applicationCategory: 'NewsApplication',
+  operatingSystem: 'Web',
+  description:
+    'Personal news agent: score sources against your stack and get daily impact reasoning.',
+  offers: [
+    { '@type': 'Offer', price: '0', priceCurrency: 'INR', name: 'Free' },
+    { '@type': 'Offer', price: '699', priceCurrency: 'INR', name: 'Pro monthly' },
+  ],
+  url: site,
+}
 ---
 
-<Base title="Atlas — Your personal news agent">
+<Base
+  title="Atlas — Your personal news agent"
+  description="Connect your sources. Atlas scores every item against your profile and stack — not a crowd feed."
+  jsonLd={jsonLd}
+  canonical={site + '/'}
+>
   <!-- Marketing nav -->
   <header class="border-b border-border bg-bg/80 backdrop-blur-md sticky top-0 z-40">
     <div class="mx-auto flex h-14 max-w-5xl items-center justify-between px-4 sm:px-6">
@@ -104,7 +125,7 @@ import Base from '../layouts/Base.astro'
               </p>
             </div>
             <p class="text-xs text-text-muted">
-              Free: top-3 impact · Pro: top-10 + email / RSS / webhook
+              Free: top-3 impact · Pro (₹699/mo): top-10 + email / RSS / webhook
             </p>
           </div>
         </div>
@@ -203,13 +224,13 @@ import Base from '../layouts/Base.astro'
             <Badge variant="pro">Recommended</Badge>
           </div>
           <p class="mt-2 text-3xl font-medium tracking-tight text-text">
-            $8<span class="text-base font-normal text-text-muted">/mo</span>
+            ₹699<span class="text-base font-normal text-text-muted">/mo</span>
           </p>
           <ul class="mt-6 space-y-2 text-sm text-text-muted">
             <li>Unlimited sources</li>
             <li>Email, RSS, webhooks</li>
             <li>Top-10 impact reasoning</li>
-            <li>Everything in Free</li>
+            <li>Everything in Free · Razorpay</li>
           </ul>
           <Button href="/signup" variant="primary" size="md" class="mt-8 w-full">Upgrade after signup</Button>
         </Card>

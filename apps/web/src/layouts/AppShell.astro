@@ -9,6 +9,8 @@ interface Props {
   width?: 'md' | 'lg' | 'xl'
   /** Hide sticky nav (rare) */
   hideNav?: boolean
+  jsonLd?: Record<string, unknown> | Record<string, unknown>[]
+  canonical?: string
 }
 
 const {
@@ -16,6 +18,8 @@ const {
   description,
   width = 'lg',
   hideNav = false,
+  jsonLd,
+  canonical,
 } = Astro.props
 
 const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
@@ -27,7 +31,7 @@ const widths: Record<string, string> = {
 }
 ---
 
-<Base title={title} description={description}>
+<Base title={title} description={description} jsonLd={jsonLd} canonical={canonical}>
   <div class="flex min-h-dvh flex-col">
     {!hideNav && <AppNav apiUrl={API_URL} />}
     <main

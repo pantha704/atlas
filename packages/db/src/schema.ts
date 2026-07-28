@@ -14,8 +14,10 @@ export const users = sqliteTable('users', {
     .default('free'),
   // ponytail: prefs_json as text — promote to JSON column if we add postgres later
   prefs: text('prefs_json'),
-  // v0.6 billing
+  // Billing provider id (Razorpay subscription / payment_link id).
+  // Column name kept for migration compatibility.
   stripeCustomerId: text('stripe_customer_id'),
+  // Pro trial / one-month payment-link window
   trialEndsAt: text('trial_ends_at'),
   createdAt: text('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
 })

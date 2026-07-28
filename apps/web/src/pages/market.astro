@@ -4,9 +4,23 @@ import PageHeader from '../components/ui/PageHeader.astro'
 import AppShell from '../layouts/AppShell.astro'
 
 const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
+const site = Astro.site?.href?.replace(/\/$/, '') ?? 'https://atlas-nine-ashy.vercel.app'
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'CollectionPage',
+  name: 'Atlas Source Market',
+  description: 'Community-curated news sources for your personal Atlas digest.',
+  url: `${site}/market`,
+  isPartOf: { '@type': 'WebSite', name: 'Atlas', url: site },
+}
 ---
 
-<AppShell title="Source Market — Atlas" description="Community-curated sources">
+<AppShell
+  title="Source Market — Atlas"
+  description="Community-curated sources for your personal news agent"
+  jsonLd={jsonLd}
+  canonical={`${site}/market`}
+>
   <PageHeader
     title="Source market"
     description="Community-curated sources. Add them to your Atlas in one click."

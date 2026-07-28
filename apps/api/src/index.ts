@@ -57,7 +57,16 @@ import {
 import { and, count, desc, eq } from 'drizzle-orm'
 import { type Context, Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { billingConfigured, createCheckoutSession, verifyStripeWebhook } from './billing'
+import {
+  billingConfigured,
+  createCheckoutSession,
+  isProDowngradeEvent,
+  isProUpgradeEvent,
+  plusThirtyDays,
+  subscriptionIdFromEvent,
+  userIdFromRazorpayEvent,
+  verifyRazorpayWebhook,
+} from './billing'
 import { sendDigestEmail } from './email'
 import { reportError, track } from './observability'
 import {
@@ -80,10 +89,12 @@ export interface Env extends AuthEnv {
   RESEND_API_KEY?: string
   RESEND_FROM_EMAIL?: string
   WEB_URL?: string // Pages frontend URL for redirects
-  // Billing (optional until Stripe configured)
-  STRIPE_SECRET_KEY?: string
-  STRIPE_PRICE_ID?: string
-  STRIPE_WEBHOOK_SECRET?: string
+  // Billing (Razorpay — optional until configured)
+  RAZORPAY_KEY_ID?: string
+  RAZORPAY_KEY_SECRET?: string
+  RAZORPAY_PLAN_ID?: string
+  RAZORPAY_AMOUNT_PAISE?: string
+  RAZORPAY_WEBHOOK_SECRET?: string
   // Vercel cron / external schedulers
   CRON_SECRET?: string
   DEMO_MODE?: string
@@ -988,14 +999,17 @@ app.get('/badges/:userId', async (c) => {
   return c.json({ badges })
 })
 
-// ===== Billing (Stripe Checkout) =====
+// ===== Billing (Razorpay) =====
 
 app.post('/billing/checkout', async (c) => {
   const user = await requireAuth(c.req.raw, c.env, getDB(c.env))
   if (!user) return c.json({ error: 'unauthorized' }, 401)
   if (!billingConfigured(c.env)) {
     return c.json(
-      { error: 'billing not configured — set STRIPE_SECRET_KEY and STRIPE_PRICE_ID' },
+      {
+        error:
+          'billing not configured — set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET (optional RAZORPAY_PLAN_ID)',
+      },
       501,
     )
   }
@@ -1005,48 +1019,66 @@ app.post('/billing/checkout', async (c) => {
   const result = await createCheckoutSession(c.env, {
     customerId: row?.stripeCustomerId ?? null,
     customerEmail: user.email,
+    customerName: user.name,
     userId: user.id,
   })
   if ('error' in result) {
     const status = result.status === 501 ? 501 : 502
     return c.json({ error: result.error }, status)
   }
-  return c.json({ ok: true, url: result.url, sessionId: result.sessionId })
+  // Persist subscription / payment-link id for cancel reconciliation
+  if (result.sessionId) {
+    await db
+      .update(users)
+      .set({ stripeCustomerId: result.sessionId })
+      .where(eq(users.id, user.id))
+  }
+  return c.json({
+    ok: true,
+    url: result.url,
+    sessionId: result.sessionId,
+    mode: result.mode,
+    keyId: c.env.RAZORPAY_KEY_ID,
+  })
 })
 
 app.post('/billing/webhook', async (c) => {
   const rawBody = await c.req.text()
-  const sig = c.req.header('stripe-signature') ?? null
-  const verified = await verifyStripeWebhook(c.env, rawBody, sig)
+  const sig =
+    c.req.header('x-razorpay-signature') ?? c.req.header('X-Razorpay-Signature') ?? null
+  const verified = await verifyRazorpayWebhook(c.env, rawBody, sig)
   if (!verified.ok) return c.json({ error: verified.error }, 400)
 
   const event = verified.event
   const db = getDB(c.env)
+  const userId = userIdFromRazorpayEvent(event)
+  const subId = subscriptionIdFromEvent(event)
 
-  if (event.type === 'checkout.session.completed') {
-    const obj = event.data.object
-    const userId = obj.client_reference_id ?? obj.metadata?.user_id
-    if (userId) {
-      const updates: { plan: 'pro'; stripeCustomerId?: string } = { plan: 'pro' }
-      if (obj.customer) updates.stripeCustomerId = obj.customer
-      await db.update(users).set(updates).where(eq(users.id, userId))
-      track(c.env, 'plan_upgraded', userId, { plan: 'pro', source: 'stripe' })
+  if (userId && isProUpgradeEvent(event.event)) {
+    const updates: { plan: 'pro'; stripeCustomerId?: string; trialEndsAt?: string | null } = {
+      plan: 'pro',
     }
+    if (subId) updates.stripeCustomerId = subId
+    // Payment-link one-shots get a 30-day window; subscriptions clear trial
+    if (event.event === 'payment_link.paid' || event.event === 'payment.captured') {
+      if (!c.env.RAZORPAY_PLAN_ID) {
+        updates.trialEndsAt = plusThirtyDays()
+      }
+    } else {
+      updates.trialEndsAt = null
+    }
+    await db.update(users).set(updates).where(eq(users.id, userId))
+    track(c.env, 'plan_upgraded', userId, { plan: 'pro', source: 'razorpay', event: event.event })
   }
 
-  if (
-    event.type === 'customer.subscription.deleted' ||
-    (event.type === 'customer.subscription.updated' &&
-      event.data.object.status &&
-      ['canceled', 'unpaid', 'incomplete_expired'].includes(event.data.object.status))
-  ) {
-    const customerId = event.data.object.customer
-    if (customerId) {
-      await db
-        .update(users)
-        .set({ plan: 'free' })
-        .where(eq(users.stripeCustomerId, customerId))
-    }
+  if (userId && isProDowngradeEvent(event.event)) {
+    await db.update(users).set({ plan: 'free', trialEndsAt: null }).where(eq(users.id, userId))
+    track(c.env, 'plan_downgraded', userId, { plan: 'free', source: 'razorpay', event: event.event })
+  } else if (!userId && subId && isProDowngradeEvent(event.event)) {
+    await db
+      .update(users)
+      .set({ plan: 'free', trialEndsAt: null })
+      .where(eq(users.stripeCustomerId, subId))
   }
 
   return c.json({ received: true })

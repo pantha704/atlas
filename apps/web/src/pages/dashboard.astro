@@ -188,7 +188,8 @@ const subtitle =
   </Card>
 
   <!-- Digest body -->
-  <section class="mt-8" aria-label="Digest content">
+  <section class="mt-8" aria-labelledby="digest-heading">
+    <h2 id="digest-heading" class="sr-only">Digest content</h2>
     {
       digestError && !digestMd && (
         <EmptyState
@@ -206,7 +207,11 @@ const subtitle =
     {
       digestMd && (
         <Card padding="lg" class="overflow-hidden">
-          <article class="prose-atlas max-w-none" set:html={renderDigestMarkdown(digestMd)} />
+          <article
+            class="prose-atlas max-w-none"
+            tabindex="0"
+            set:html={renderDigestMarkdown(digestMd)}
+          />
         </Card>
       )
     }

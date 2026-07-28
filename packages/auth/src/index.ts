@@ -234,7 +234,7 @@ export async function requireAuth(
   if (!token) return null
   const session = await verifySessionToken(token, env.BETTER_AUTH_SECRET)
   if (!session) return null
-  // Refresh plan from DB (Stripe upgrade / trial expiry) — JWT plan can be stale
+  // Refresh plan from DB (Razorpay upgrade / trial expiry) — JWT plan can be stale
   const rows = await db
     .select({
       id: users.id,

@@ -5,13 +5,20 @@ interface Props {
   title?: string
   description?: string
   lang?: 'en' | 'zh'
+  /** Optional JSON-LD object (SoftwareApplication, ItemList, etc.) */
+  jsonLd?: Record<string, unknown> | Record<string, unknown>[]
+  canonical?: string
 }
 
 const {
   title = 'Atlas — your personal news agent',
   description = 'Connect your sources. Atlas tells you what changed, what it means for your stack, and what to do next.',
   lang = 'en',
+  jsonLd,
+  canonical,
 } = Astro.props
+
+const jsonLdBlocks = jsonLd ? (Array.isArray(jsonLd) ? jsonLd : [jsonLd]) : []
 ---
 
 <!doctype html>
@@ -22,6 +29,8 @@ const {
     <meta name="description" content={description} />
     <meta name="theme-color" content="#08090a" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#f7f8f8" media="(prefers-color-scheme: light)" />
+    <meta name="color-scheme" content="dark light" />
+    {canonical && <link rel="canonical" href={canonical} />}
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -30,6 +39,11 @@ const {
       rel="stylesheet"
     />
     <title>{title}</title>
+    {
+      jsonLdBlocks.map((block) => (
+        <script is:inline type="application/ld+json" set:html={JSON.stringify(block)} />
+      ))
+    }
     <script is:inline>
       // Theme before paint — avoid FOUC
       ;(() => {
