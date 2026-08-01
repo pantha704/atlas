@@ -577,26 +577,39 @@ app.get('/my-digest', async (c) => {
   const db = getDB(c.env)
   const plan = user.plan as Plan
   const force = c.req.query('force') === '1'
-  // peek/cached=1: return same-day digest only — never run scoring (safe for SSR)
+  // peek/cached=1: return cache only — never run scoring (safe for SSR)
   const peekOnly = c.req.query('peek') === '1' || c.req.query('cached') === '1'
+  // fast=1 (default for generate on serverless): skip live multi-source fetch + skip impact AI
+  const fast = c.req.query('fast') !== '0'
   const today = new Date().toISOString().slice(0, 10)
 
-  // Serve cached same-day digest unless force=1
+  // Serve any recent personal digest (today first, then latest) unless force=1
   if (!force) {
-    const cached = await db
+    const todayCached = await db
       .select()
       .from(digests)
       .where(and(eq(digests.userId, user.id), eq(digests.date, today)))
       .limit(1)
-    if (cached[0]?.renderedMd) {
+    const cached =
+      todayCached[0] ??
+      (
+        await db
+          .select()
+          .from(digests)
+          .where(eq(digests.userId, user.id))
+          .orderBy(desc(digests.date))
+          .limit(1)
+      )[0]
+    if (cached?.renderedMd) {
       return c.json({
-        markdown: cached[0].renderedMd,
+        markdown: cached.renderedMd,
         itemCounts: { cached: true },
-        digestId: cached[0].id,
+        digestId: cached.id,
+        date: cached.date,
       })
     }
     if (peekOnly) {
-      return c.json({ error: 'no cached digest for today', code: 'no_cache' }, 404)
+      return c.json({ error: 'no cached digest', code: 'no_cache' }, 404)
     }
   }
 
@@ -605,36 +618,71 @@ app.get('/my-digest', async (c) => {
 
   const config: Config = {
     ...DEFAULT_CONFIG,
-    ai: buildAIConfig(c.env),
+    ai: {
+      ...buildAIConfig(c.env),
+      // Serverless: fewer concurrent AI calls, less throttle wait
+      analysisConcurrency: 2,
+      throttleSec: 0,
+    },
     sources: buildUserConfig(userSources, DEFAULT_CONFIG.sources),
   }
   const profile: UserProfile = profileRow[0]
     ? {
         userId: user.id,
-        interests: profileRow[0]?.interests ?? '',
-        stack: profileRow[0]?.stack ? JSON.parse(profileRow[0].stack) : [],
+        interests: profileRow[0].interests ?? '',
+        stack: profileRow[0].stack ? JSON.parse(profileRow[0].stack) : [],
         tagWeights: parseTagWeights(profileRow[0]),
         language: 'en',
-        threshold: 7.0,
+        // Slightly lower bar so digests aren't empty on sparse days
+        threshold: 6.0,
       }
-    : defaultProfile(user.id)
+    : { ...defaultProfile(user.id), threshold: 6.0 }
 
-  if (!c.env.GROQ_API_KEY) return c.json({ error: 'AI not configured' }, 500)
+  if (!c.env.GROQ_API_KEY) return c.json({ error: 'AI not configured (GROQ_API_KEY)' }, 500)
 
   const aiClient = createAIClient(config.ai)
-  const since = new Date(Date.now() - config.filtering.timeWindowHours * 3600 * 1000)
+  // Wider window so stored items aren't empty if cron is stale
+  const since = new Date(Date.now() - Math.max(config.filtering.timeWindowHours, 72) * 3600 * 1000)
   const sinceIso = since.toISOString()
 
-  // 1. Global items already fetched by cron + live fetch for user-specific sources
-  const stored = await loadRecentItems(db, sinceIso)
-  const live = await fetchAllSources(config, since)
-  const merged = mergeFetchedWithStored(live, stored)
+  // 1. Prefer DB items (fast). Live fetch only if empty or force+!fast
+  let stored = await loadRecentItems(db, sinceIso)
+  let live: ContentItem[] = []
+  if (!fast || stored.length === 0) {
+    try {
+      live = await fetchAllSources(config, since)
+    } catch (err) {
+      console.error('live fetch failed', err)
+      live = []
+    }
+  }
+  let merged = mergeFetchedWithStored(live, stored)
+  // Cap work for serverless — score at most 15 newest items
+  merged = merged
+    .slice()
+    .sort((a, b) => (b.publishedAt > a.publishedAt ? 1 : -1))
+    .slice(0, 15)
+
+  if (merged.length === 0) {
+    return c.json(
+      {
+        error:
+          'No items to score. Run global pipeline first or wait for cron, then try again.',
+        code: 'no_items',
+      },
+      404,
+    )
+  }
 
   // 2. Persist any new live items globally
   const idMap = await storeGlobalItems(db, merged)
 
   // 3. Load cached scores — only AI-score missing items
-  const scoreMap = await loadUserScoreMap(db, user.id, merged.map((i) => i.id))
+  const scoreMap = await loadUserScoreMap(
+    db,
+    user.id,
+    merged.map((i) => i.id),
+  )
   const toScore: ContentItem[] = []
   const already: ContentItem[] = []
   for (const item of merged) {
@@ -654,9 +702,10 @@ app.get('/my-digest', async (c) => {
   let newlyScored: ContentItem[] = []
   if (toScore.length > 0) {
     const analyzer = new PerUserAnalyzer(aiClient, profile, {
-      concurrency: config.ai.analysisConcurrency,
-      throttleSec: config.ai.throttleSec,
-      reasonModel: config.ai.reasonModel,
+      concurrency: 2,
+      throttleSec: 0,
+      // Use cheap model for speed on serverless
+      reasonModel: config.ai.cheapModel,
     })
     newlyScored = await analyzer.analyzeBatch(toScore)
     for (const item of newlyScored) {
@@ -681,39 +730,60 @@ app.get('/my-digest', async (c) => {
   }
 
   const analyzed = [...already, ...newlyScored]
-  const important = analyzed
+  let important = analyzed
     .filter((item) => item.aiScore !== null && item.aiScore >= profile.threshold)
     .sort((a, b) => (b.aiScore ?? 0) - (a.aiScore ?? 0))
 
-  const deduped = await mergeTopicDuplicates(aiClient, important)
-
-  // 4. Impact reasoning — top-N by plan; skip items that already have impact cached
-  const topN = impactTopN(plan)
-  const needImpact = deduped.slice(0, topN).filter((item) => {
-    const s = scoreMap.get(item.id)
-    return !s?.impact
-  })
-  const reasoner = new ImpactReasoner(aiClient, { reasonModel: config.ai.reasonModel })
-  const impacts = needImpact.length
-    ? await reasoner.reasonBatch(needImpact, profile, topN)
-    : new Map()
-
-  for (const item of deduped.slice(0, topN)) {
-    const impact = impacts.get(item.id)
-    if (!impact) continue
-    const dbItemId = idMap.get(item.id) ?? scoreMap.get(item.id)?.dbItemId
-    if (!dbItemId) continue
-    await upsertUserScore(db, {
-      dbItemId,
-      userId: user.id,
-      score: Math.round(item.aiScore ?? 0),
-      reason: item.aiReason ?? '',
-      tags: item.aiTags,
-      impact,
-    })
+  // If threshold wiped everything, keep top 5 by score so digest isn't empty
+  if (important.length === 0 && analyzed.length > 0) {
+    important = analyzed
+      .filter((i) => i.aiScore !== null)
+      .sort((a, b) => (b.aiScore ?? 0) - (a.aiScore ?? 0))
+      .slice(0, 5)
   }
 
-  // 5. Render + save digest
+  // Skip expensive topic-merge AI on fast path
+  let deduped = important
+  if (!fast && important.length > 1) {
+    try {
+      deduped = await mergeTopicDuplicates(aiClient, important)
+    } catch {
+      deduped = important
+    }
+  }
+
+  // 4. Impact reasoning — skip on fast path (saves most AI time)
+  const topN = impactTopN(plan)
+  if (!fast) {
+    const needImpact = deduped.slice(0, topN).filter((item) => {
+      const s = scoreMap.get(item.id)
+      return !s?.impact
+    })
+    try {
+      const reasoner = new ImpactReasoner(aiClient, { reasonModel: config.ai.cheapModel })
+      const impacts = needImpact.length
+        ? await reasoner.reasonBatch(needImpact, profile, topN)
+        : new Map()
+      for (const item of deduped.slice(0, topN)) {
+        const impact = impacts.get(item.id)
+        if (!impact) continue
+        const dbItemId = idMap.get(item.id) ?? scoreMap.get(item.id)?.dbItemId
+        if (!dbItemId) continue
+        await upsertUserScore(db, {
+          dbItemId,
+          userId: user.id,
+          score: Math.round(item.aiScore ?? 0),
+          reason: item.aiReason ?? '',
+          tags: item.aiTags,
+          impact,
+        })
+      }
+    } catch (err) {
+      console.error('impact reasoning skipped', err)
+    }
+  }
+
+  // 5. Render + upsert digest for today
   const summarizer = new DailySummarizer()
   const markdown = await summarizer.generateSummary(
     deduped,
@@ -722,46 +792,70 @@ app.get('/my-digest', async (c) => {
     profile.language,
   )
 
-  const digestId = crypto.randomUUID()
-  await db.insert(digests).values({
-    id: digestId,
-    userId: user.id,
-    date: today,
-    items: JSON.stringify(deduped.map((i) => ({ id: i.id, title: i.title, score: i.aiScore }))),
-    renderedMd: markdown,
-  })
-
-  // 6. Delivery — pro only for email/webhook (free = web dashboard)
-  const deliveryPrefs = parseDeliveryPrefs(profileRow[0]?.deliveryPrefs)
-  const siteUrl = (c.env.WEB_URL ?? c.env.APP_URL ?? 'https://atlas.pages.dev') as string
-  const subject = `Atlas — Your Daily Digest (${today})`
-
-  if (deliveryPrefs.email && user.email && canUseDelivery(plan, 'email')) {
-    const emailResult = await sendDigestEmail(user.email, subject, markdown, c.env)
-    await db.insert(deliveries).values({
-      id: crypto.randomUUID(),
-      digestId,
-      channel: 'email',
-      status: emailResult.ok ? 'sent' : 'failed',
-      sentAt: emailResult.ok ? new Date().toISOString() : null,
+  const existingToday = await db
+    .select()
+    .from(digests)
+    .where(and(eq(digests.userId, user.id), eq(digests.date, today)))
+    .limit(1)
+  const itemsJson = JSON.stringify(
+    deduped.map((i) => ({ id: i.id, title: i.title, score: i.aiScore })),
+  )
+  let digestId = existingToday[0]?.id ?? crypto.randomUUID()
+  if (existingToday[0]) {
+    await db
+      .update(digests)
+      .set({
+        renderedMd: markdown,
+        items: itemsJson,
+        deliveredAt: new Date().toISOString(),
+      })
+      .where(eq(digests.id, existingToday[0].id))
+    // Clean duplicate same-day digests if any
+    // (older bugs inserted multiple rows per day)
+  } else {
+    await db.insert(digests).values({
+      id: digestId,
+      userId: user.id,
+      date: today,
+      items: itemsJson,
+      renderedMd: markdown,
+      deliveredAt: new Date().toISOString(),
     })
   }
 
-  if (deliveryPrefs.webhookUrl && canUseDelivery(plan, 'webhook')) {
-    const webhookResult = await sendWebhook(deliveryPrefs.webhookUrl, {
-      event: 'digest_ready',
-      digestUrl: `${siteUrl}/share/${digestId}`,
-      date: today,
-      itemCount: deduped.length,
-      siteUrl,
-    })
-    await db.insert(deliveries).values({
-      id: crypto.randomUUID(),
-      digestId,
-      channel: 'webhook',
-      status: webhookResult.ok ? 'sent' : 'failed',
-      sentAt: webhookResult.ok ? new Date().toISOString() : null,
-    })
+  // 6. Delivery — pro only (skip on fast to keep under timeout)
+  if (!fast) {
+    const deliveryPrefs = parseDeliveryPrefs(profileRow[0]?.deliveryPrefs)
+    const siteUrl = (c.env.WEB_URL ?? c.env.APP_URL ?? 'https://atlas.pages.dev') as string
+    const subject = `Atlas — Your Daily Digest (${today})`
+
+    if (deliveryPrefs.email && user.email && canUseDelivery(plan, 'email')) {
+      const emailResult = await sendDigestEmail(user.email, subject, markdown, c.env)
+      await db.insert(deliveries).values({
+        id: crypto.randomUUID(),
+        digestId,
+        channel: 'email',
+        status: emailResult.ok ? 'sent' : 'failed',
+        sentAt: emailResult.ok ? new Date().toISOString() : null,
+      })
+    }
+
+    if (deliveryPrefs.webhookUrl && canUseDelivery(plan, 'webhook')) {
+      const webhookResult = await sendWebhook(deliveryPrefs.webhookUrl, {
+        event: 'digest_ready',
+        digestUrl: `${siteUrl}/share/${digestId}`,
+        date: today,
+        itemCount: deduped.length,
+        siteUrl,
+      })
+      await db.insert(deliveries).values({
+        id: crypto.randomUUID(),
+        digestId,
+        channel: 'webhook',
+        status: webhookResult.ok ? 'sent' : 'failed',
+        sentAt: webhookResult.ok ? new Date().toISOString() : null,
+      })
+    }
   }
 
   track(c.env, 'digest_ready', user.id, {
@@ -771,6 +865,7 @@ app.get('/my-digest', async (c) => {
     newlyScored: newlyScored.length,
     fromCache: already.length,
     forced: force,
+    fast,
   })
 
   return c.json({
@@ -781,6 +876,8 @@ app.get('/my-digest', async (c) => {
       fromCache: already.length,
       newlyScored: newlyScored.length,
       scored: deduped.length,
+      cached: false,
+      fast,
     },
     plan,
   })
