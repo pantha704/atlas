@@ -104,6 +104,9 @@ export interface Env extends AuthEnv {
   SENTRY_DSN?: string
 }
 
+/** Synthetic user id for the global public digest row in `digests`. */
+const PUBLIC_DIGEST_USER = '__public__'
+
 const app = new Hono<{ Bindings: Env }>()
 
 // CORS — allow Pages frontend to make authenticated requests
@@ -200,10 +203,39 @@ ${urls.map((u) => `  <url><loc>${u.loc}</loc>${u.lastmod ? `<lastmod>${u.lastmod
   return new Response(xml, { headers: { 'Content-Type': 'application/xml; charset=utf-8' } })
 })
 
-app.get('/digest', (c) => {
+app.get('/digest', async (c) => {
+  // Prefer DB-persisted public digest (serverless env is ephemeral on Vercel)
+  try {
+    const db = getDB(c.env)
+    const today = new Date().toISOString().slice(0, 10)
+    const rows = await db
+      .select()
+      .from(digests)
+      .where(and(eq(digests.userId, PUBLIC_DIGEST_USER), eq(digests.date, today)))
+      .limit(1)
+    if (rows[0]?.renderedMd) {
+      return c.json({ markdown: rows[0].renderedMd, generatedAt: rows[0].deliveredAt ?? today, source: 'db' })
+    }
+    // fallback: latest public digest any day
+    const latest = await db
+      .select()
+      .from(digests)
+      .where(eq(digests.userId, PUBLIC_DIGEST_USER))
+      .orderBy(desc(digests.date))
+      .limit(1)
+    if (latest[0]?.renderedMd) {
+      return c.json({
+        markdown: latest[0].renderedMd,
+        generatedAt: latest[0].date,
+        source: 'db',
+      })
+    }
+  } catch {
+    // fall through to env
+  }
   const md = c.env.ATLAS_LAST_DIGEST ?? ''
   if (!md) return c.json({ error: 'no digest yet', markdown: '' }, 404)
-  return c.json({ markdown: md, generatedAt: new Date().toISOString() })
+  return c.json({ markdown: md, generatedAt: new Date().toISOString(), source: 'env' })
 })
 
 app.post('/trigger', async (c) => {
@@ -1326,6 +1358,38 @@ async function runGlobalFetch(env: Env): Promise<{
     // store the scored global set at minimum.
     const db = getDB(env)
     const idMap = await storeGlobalItems(db, result.items)
+
+    // Persist public digest (Vercel/serverless cannot keep ATLAS_LAST_DIGEST across invocations)
+    if (enDigest?.markdown) {
+      const today = new Date().toISOString().slice(0, 10)
+      const existing = await db
+        .select({ id: digests.id })
+        .from(digests)
+        .where(and(eq(digests.userId, PUBLIC_DIGEST_USER), eq(digests.date, today)))
+        .limit(1)
+      const itemsJson = JSON.stringify(
+        result.items.slice(0, 50).map((i) => ({ id: i.id, title: i.title, score: i.aiScore })),
+      )
+      if (existing[0]) {
+        await db
+          .update(digests)
+          .set({
+            renderedMd: enDigest.markdown,
+            items: itemsJson,
+            deliveredAt: new Date().toISOString(),
+          })
+          .where(eq(digests.id, existing[0].id))
+      } else {
+        await db.insert(digests).values({
+          id: crypto.randomUUID(),
+          userId: PUBLIC_DIGEST_USER,
+          date: today,
+          items: itemsJson,
+          renderedMd: enDigest.markdown,
+          deliveredAt: new Date().toISOString(),
+        })
+      }
+    }
 
     return {
       ok: true,

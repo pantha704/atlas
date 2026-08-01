@@ -2,6 +2,8 @@ import type { APIRoute } from 'astro'
 import { app } from '@atlas/api'
 
 export const prerender = false
+// Pipeline / cron can run long — raise Vercel function limit (Pro plan allows up to 300s)
+export const maxDuration = 300
 
 export const ALL: APIRoute = async ({ request }) => {
   const url = new URL(request.url)
