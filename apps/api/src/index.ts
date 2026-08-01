@@ -266,11 +266,25 @@ app.post('/cron/fetch', handleCronFetch)
 
 // ===== Auth routes =====
 
+/** Append Set-Cookie without clobbering prior cookies (Hono overwrites by default). */
+function appendCookie(c: Context, value: string) {
+  c.header('Set-Cookie', value, { append: true })
+}
+
 app.get('/auth/github', (c) => {
   const state = crypto.randomUUID()
   const url = githubAuthUrl(c.env, state)
-  // ponytail: state stored in short-lived cookie for CSRF protection
-  c.header('Set-Cookie', `atlas_oauth_state=${state}; Path=/; Max-Age=600; HttpOnly; SameSite=Lax`)
+  // State cookie for CSRF — Secure on https
+  const secure = (c.env.APP_URL ?? '').startsWith('https://')
+  const flags = [
+    `atlas_oauth_state=${state}`,
+    'Path=/',
+    'Max-Age=600',
+    'HttpOnly',
+    'SameSite=Lax',
+  ]
+  if (secure) flags.push('Secure')
+  appendCookie(c, flags.join('; '))
   return c.redirect(url)
 })
 
@@ -283,14 +297,15 @@ async function handleAuthCallback(c: Context) {
   const state = c.req.query('state')
   const cookieState = extractStateFromCookie(c.req.header('cookie'))
   if (!code || !state || state !== cookieState) {
-    return c.json({ error: 'invalid OAuth state' }, 400)
+    // Soft redirect to signup with error instead of raw JSON (better UX)
+    return c.redirect('/signup?error=oauth_state')
   }
   const tokenResult = await exchangeGithubCode(code, c.env)
-  if (!tokenResult) return c.json({ error: 'GitHub token exchange failed' }, 400)
+  if (!tokenResult) return c.redirect('/signup?error=token')
   const ghUser = await fetchGithubUser(tokenResult.accessToken)
-  if (!ghUser) return c.json({ error: 'failed to fetch GitHub user' }, 400)
+  if (!ghUser) return c.redirect('/signup?error=github_user')
   const email = ghUser.email ?? (await fetchGithubEmail(tokenResult.accessToken))
-  if (!email) return c.json({ error: 'no verified email on GitHub account' }, 400)
+  if (!email) return c.redirect('/signup?error=email')
 
   const db = getDB(c.env)
   const prior = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1)
@@ -298,9 +313,11 @@ async function handleAuthCallback(c: Context) {
   const user = await upsertUserFromGithub(db, ghUser, email)
   const jwt = await createSessionToken(user, c.env.BETTER_AUTH_SECRET)
   await createDbSession(db, user.id, jwt)
-  const secure = c.env.APP_URL.startsWith('https://')
-  c.header('Set-Cookie', setSessionCookie(jwt, secure))
-  c.header('Set-Cookie', 'atlas_oauth_state=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax')
+  const secure = (c.env.APP_URL ?? '').startsWith('https://')
+
+  // MUST append — a second c.header('Set-Cookie') overwrites the session cookie
+  appendCookie(c, setSessionCookie(jwt, secure))
+  appendCookie(c, 'atlas_oauth_state=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax')
 
   // v0.7: Record referral if cookie present
   const refCookie = c.req.header('cookie')?.match(/atlas_ref=([^;]+)/)?.[1]
@@ -315,7 +332,7 @@ async function handleAuthCallback(c: Context) {
       })
       track(c.env, 'referral_recorded', user.id, { referrerId: refCookie })
     }
-    c.header('Set-Cookie', 'atlas_ref=; Path=/; Max-Age=0; SameSite=Lax')
+    appendCookie(c, 'atlas_ref=; Path=/; Max-Age=0; SameSite=Lax')
   }
 
   track(c.env, isNew ? 'user_signed_up' : 'user_signed_in', user.id, {
@@ -323,9 +340,10 @@ async function handleAuthCallback(c: Context) {
     provider: 'github',
   })
 
-  // Redirect to web frontend — same domain on Vercel, or WEB_URL for separate deploy
-  const webUrl = c.env.WEB_URL ?? ''
-  return c.redirect(`${webUrl}/dashboard`)
+  // Same-origin relative redirect so session cookie applies (WEB_URL optional)
+  const webUrl = (c.env.WEB_URL ?? '').replace(/\/$/, '')
+  const dest = isNew ? '/onboarding' : '/dashboard'
+  return c.redirect(webUrl ? `${webUrl}${dest}` : dest)
 }
 
 app.post('/auth/logout', async (c) => {
@@ -334,7 +352,7 @@ app.post('/auth/logout', async (c) => {
     const db = getDB(c.env)
     await revokeDbSession(db, token)
   }
-  c.header('Set-Cookie', clearSessionCookie())
+  appendCookie(c, clearSessionCookie())
   return c.json({ ok: true })
 })
 
