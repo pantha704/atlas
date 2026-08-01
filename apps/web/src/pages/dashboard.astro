@@ -17,6 +17,7 @@ const cookie = Astro.request.headers.get('cookie') ?? ''
 type DigestMode = 'personal' | 'public' | 'demo' | 'empty'
 
 let digestMd: string | null = null
+let digestHtml: string | null = null
 let digestError: string | null = null
 let mode: DigestMode = 'empty'
 let itemMeta: { scored?: number; fromCache?: number; newlyScored?: number } | null = null
@@ -51,6 +52,7 @@ async function fetchJson<T>(
     userPlan = me.data.user.plan ?? 'free'
     const dig = await fetchJson<{
       markdown?: string
+      html?: string
       itemCounts?: { scored?: number; fromCache?: number; newlyScored?: number; cached?: boolean }
     }>('/my-digest?peek=1', {
       headers: cookie ? { cookie } : {},
@@ -58,6 +60,7 @@ async function fetchJson<T>(
     })
     if (dig.ok && dig.data?.markdown) {
       digestMd = dig.data.markdown
+      digestHtml = dig.data.html || renderDigestMarkdown(dig.data.markdown)
       mode = 'personal'
       itemMeta = dig.data.itemCounts ?? null
     }
@@ -66,9 +69,10 @@ async function fetchJson<T>(
 
 // 2) Public global digest (DB-backed)
 if (!digestMd) {
-  const pub = await fetchJson<{ markdown?: string }>('/digest', { timeoutMs: 8000 })
+  const pub = await fetchJson<{ markdown?: string; html?: string }>('/digest', { timeoutMs: 8000 })
   if (pub.ok && pub.data?.markdown) {
     digestMd = pub.data.markdown
+    digestHtml = pub.data.html || renderDigestMarkdown(pub.data.markdown)
     mode = 'public'
   } else if (pub.status === 0) {
     digestError = 'Could not reach the API from the server. Retry in a moment.'
@@ -77,9 +81,12 @@ if (!digestMd) {
 
 // 3) Demo seed — never show empty if demo works
 if (!digestMd) {
-  const demo = await fetchJson<{ markdown?: string }>('/demo/digest', { timeoutMs: 8000 })
+  const demo = await fetchJson<{ markdown?: string; html?: string }>('/demo/digest', {
+    timeoutMs: 8000,
+  })
   if (demo.ok && demo.data?.markdown) {
     digestMd = demo.data.markdown
+    digestHtml = demo.data.html || renderDigestMarkdown(demo.data.markdown)
     mode = 'demo'
     digestError = null
   }
@@ -90,6 +97,9 @@ if (!digestMd && !digestError) {
     ? 'No personal digest yet. Click “Generate my digest” (needs sources + AI keys).'
     : 'No digest yet. Sign in, add sources, or wait for the daily cron.'
 }
+
+// Always render on server so anchors/score badges never show as raw text
+const articleHtml = digestHtml || (digestMd ? renderDigestMarkdown(digestMd) : '')
 
 const modeLabel =
   mode === 'personal' ? 'Personalized' : mode === 'public' ? 'Global' : mode === 'demo' ? 'Demo' : 'Empty'
@@ -106,6 +116,9 @@ const subtitle =
           ? 'Global digest. Click Generate my digest for personal scores.'
           : 'Shared global digest. Sign in for per-user scoring and impact.'
         : 'Nothing to show yet.'
+
+// Logged-in users see digest actions immediately (no client-only unhide)
+const showAuthActions = Boolean(userName)
 ---
 
 <AppShell title="Digest — Atlas" description="Your daily personal news digest">
@@ -164,13 +177,28 @@ const subtitle =
   <Card class="mt-6" padding="sm">
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div class="flex flex-wrap items-center gap-2">
-        <Button id="myDigestBtn" variant="primary" size="sm" class="hidden">
+        <Button
+          id="myDigestBtn"
+          variant="primary"
+          size="sm"
+          class={showAuthActions ? '' : 'hidden'}
+        >
           Generate my digest
         </Button>
-        <Button id="fetchMoreBtn" variant="secondary" size="sm" class="hidden">
-          Fetch more items
+        <Button
+          id="fetchMoreBtn"
+          variant="secondary"
+          size="sm"
+          class={showAuthActions ? '' : 'hidden'}
+        >
+          Fetch more (30)
         </Button>
-        <Button id="forceDigestBtn" variant="secondary" size="sm" class="hidden">
+        <Button
+          id="forceDigestBtn"
+          variant="secondary"
+          size="sm"
+          class={showAuthActions ? '' : 'hidden'}
+        >
           Force rescore
         </Button>
         <Button id="triggerBtn" variant="ghost" size="sm">
@@ -220,7 +248,7 @@ const subtitle =
         id="digest-article"
         class="prose-atlas max-w-none"
         tabindex="0"
-        set:html={digestMd ? renderDigestMarkdown(digestMd) : ''}
+        set:html={articleHtml}
       />
     </div>
   </section>
@@ -264,15 +292,25 @@ const subtitle =
     }
 
     /**
-     * Port of @atlas/core renderDigestMarkdown — correct TOC, score badges, anchors.
-     * Prefer API `html` when present (same renderer server-side).
+     * Client port of @atlas/core renderDigestMarkdown.
+     * Prefer API `html` when present — this is the fallback only.
      */
     function renderDigestMarkdown(md) {
+      if (/^\s*<(?:h1|h2|blockquote|div|p|hr)\b/i.test(md) && !String(md).includes('⭐')) {
+        return String(md)
+      }
+      const STAR = '⭐\uFE0F?'
       let html = String(md ?? '')
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
+
       html = html
+        .replace(/\[\[item:(\d+)\]\]/g, '§§ITEM:$1§§')
+        .replace(
+          /&lt;a\s+id=(?:&quot;|"|')item-(\d+)(?:&quot;|"|')\s*(?:\/)?&gt;(?:&lt;\/a&gt;)?/gi,
+          '§§ITEM:$1§§',
+        )
         .replace(
           /&lt;details&gt;&lt;summary&gt;([\s\S]*?)&lt;\/summary&gt;/g,
           '<details><summary>$1</summary>',
@@ -282,42 +320,117 @@ const subtitle =
         .replace(/&lt;li&gt;/g, '<li>')
         .replace(/&lt;\/li&gt;/g, '</li>')
         .replace(/&lt;\/details&gt;/g, '</details>')
-        .replace(/&lt;a id="item-(\d+)"&gt;&lt;\/a&gt;/g, '<a id="item-$1"></a>')
+
       html = html.replace(
-        /^## \[([^\]]+)\]\(([^)]+)\) ⭐️ (\d+(?:\.\d+)?)\/10/gm,
-        (_m, title, url, score) =>
-          `<h2><a href="${url}" rel="noopener noreferrer">${title}</a> <span class="score-badge" data-tier="${scoreTier(Number(score))}">${score}/10</span></h2>`,
+        new RegExp(
+          '^(?:§§ITEM:(\\d+)§§\\s*)?## \\[([^\\]]+)\\]\\(([^)]+)\\) ' + STAR + ' (\\d+(?:\\.\\d+)?)/10',
+          'gm',
+        ),
+        (_m, anchorId, title, url, score) => {
+          const id = anchorId ? ' id="item-' + anchorId + '"' : ''
+          return (
+            '<h2' +
+            id +
+            '><a href="' +
+            url +
+            '" rel="noopener noreferrer">' +
+            title +
+            '</a> <span class="score-badge" data-tier="' +
+            scoreTier(Number(score)) +
+            '">' +
+            score +
+            '/10</span></h2>'
+          )
+        },
       )
+      html = html.replace(/§§ITEM:(\d+)§§\s*(<h2)(?![^>]*\bid=)/g, '$2 id="item-$1"')
+      html = html.replace(/§§ITEM:\d+§§\s*/g, '')
+
       html = html.replace(
-        /^(\d+)\. \[([^\]]+)\]\(#item-(\d+)\) ⭐️ (\d+(?:\.\d+)?)\/10/gm,
+        new RegExp(
+          '^(\\d+)\\. \\[([^\\]]+)\\]\\(#item-(\\d+)\\) ' + STAR + ' (\\d+(?:\\.\\d+)?)/10',
+          'gm',
+        ),
         (_m, num, title, id, score) =>
-          `<div class="toc-item"><span class="toc-num">${num}.</span> <a href="#item-${id}">${title}</a> <span class="score-badge" data-tier="${scoreTier(Number(score))}">${score}/10</span></div>`,
+          '<div class="toc-item"><span class="toc-num">' +
+          num +
+          '.</span> <a href="#item-' +
+          id +
+          '">' +
+          title +
+          '</a> <span class="score-badge" data-tier="' +
+          scoreTier(Number(score)) +
+          '">' +
+          score +
+          '/10</span></div>',
       )
+      html = html.replace(
+        new RegExp('^(\\d+)\\. (.+?) ' + STAR + ' (\\d+(?:\\.\\d+)?)/10\\s*$', 'gm'),
+        (_m, num, title, score) =>
+          '<div class="toc-item"><span class="toc-num">' +
+          num +
+          '.</span> <span>' +
+          title.trim() +
+          '</span> <span class="score-badge" data-tier="' +
+          scoreTier(Number(score)) +
+          '">' +
+          score +
+          '/10</span></div>',
+      )
+      html = html.replace(
+        new RegExp('^## (.+?) ' + STAR + ' (\\d+(?:\\.\\d+)?)/10\\s*$', 'gm'),
+        (_m, title, score) =>
+          '<h2>' +
+          title.trim() +
+          ' <span class="score-badge" data-tier="' +
+          scoreTier(Number(score)) +
+          '">' +
+          score +
+          '/10</span></h2>',
+      )
+
       html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>')
       html = html.replace(/^---$/gm, '<hr />')
       html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>')
       html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
       html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
-      html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" rel="noopener noreferrer">$1</a>')
+      html = html.replace(
+        /\[([^\]]+)\]\(([^)]+)\)/g,
+        '<a href="$2" rel="noopener noreferrer">$1</a>',
+      )
+      html = html.replace(
+        /&lt;a href=(?:&quot;|")([^"&]+)(?:&quot;|")&gt;([\s\S]*?)&lt;\/a&gt;/g,
+        '<a href="$1" rel="noopener noreferrer">$2</a>',
+      )
+
       html = html
-        .split('\n\n')
+        .split(/\n\n+/)
         .map((block) => {
           const trimmed = block.trim()
           if (!trimmed) return ''
-          if (/^<(h[12]|blockquote|hr|div|details|ul|ol)/.test(trimmed)) return trimmed
-          if (/^<a id=/.test(trimmed)) return trimmed
-          return `<p>${trimmed.replace(/\n/g, '<br />')}</p>`
+          if (/^<(h[12]|blockquote|hr|div|details|ul|ol|p)\b/i.test(trimmed)) return trimmed
+          return '<p>' + trimmed.replace(/\n/g, '<br />') + '</p>'
         })
         .join('\n')
+
+      // Never leave escaped empty anchors as visible text
+      html = html.replace(
+        /&lt;a\s+id=(?:&quot;|"|')?item-\d+(?:&quot;|"|')?\s*(?:\/)?&gt;(?:&lt;\/a&gt;)?/gi,
+        '',
+      )
       return html
     }
 
     function showDigest(payload, badgeLabel) {
-      const markdown = typeof payload === 'string' ? payload : payload.markdown
-      const html =
-        typeof payload === 'string'
-          ? renderDigestMarkdown(payload)
-          : payload.html || renderDigestMarkdown(payload.markdown || '')
+      // Prefer server-rendered html — never re-escape good HTML
+      let html
+      if (typeof payload === 'string') {
+        html = renderDigestMarkdown(payload)
+      } else if (payload && typeof payload.html === 'string' && payload.html.trim()) {
+        html = payload.html
+      } else {
+        html = renderDigestMarkdown((payload && payload.markdown) || '')
+      }
       const empty = document.getElementById('digest-empty')
       const card = document.getElementById('digest-card')
       const article = document.getElementById('digest-article')
@@ -331,28 +444,36 @@ const subtitle =
       if (badgeLabel) setStatus(badgeLabel)
     }
 
+    function revealAuthButtons() {
+      ;['myDigestBtn', 'forceDigestBtn', 'fetchMoreBtn'].forEach((id) => {
+        document.getElementById(id)?.classList.remove('hidden')
+      })
+    }
+
     async function checkAuth() {
       try {
         const res = await fetch(`${apiUrl}/auth/me`, { credentials: 'include' })
         if (!res.ok) return
         const data = await res.json()
         if (!data.user) return
-        ;['myDigestBtn', 'forceDigestBtn', 'fetchMoreBtn'].forEach((id) => {
-          document.getElementById(id)?.classList.remove('hidden')
-        })
+        revealAuthButtons()
 
-        // Hydrate personal digest in-place (no reload)
-        if (initialMode !== 'personal') {
-          try {
-            const dig = await fetch(`${apiUrl}/my-digest?peek=1`, { credentials: 'include' })
-            if (dig.ok) {
-              const body = await dig.json()
-              if (body.markdown || body.html) {
-                showDigest(body, 'Showing your personal digest (cached).')
-              }
+        // Always hydrate from API html so cached digests render correctly
+        // (SSR may have missed the session cookie on edge)
+        try {
+          const dig = await fetch(`${apiUrl}/my-digest?peek=1`, { credentials: 'include' })
+          if (dig.ok) {
+            const body = await dig.json()
+            if (body.html || body.markdown) {
+              showDigest(
+                body,
+                initialMode === 'personal'
+                  ? 'Showing your personal digest.'
+                  : 'Showing your personal digest (cached).',
+              )
             }
-          } catch {}
-        }
+          }
+        } catch {}
       } catch {}
     }
 

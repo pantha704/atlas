@@ -55,7 +55,9 @@ describe('renderDigestMarkdown', () => {
   })
 
   it('renders links', () => {
-    expect(renderDigestMarkdown('[text](url)')).toContain('<a href="url">text</a>')
+    const html = renderDigestMarkdown('[text](url)')
+    expect(html).toContain('href="url"')
+    expect(html).toContain('>text</a>')
   })
 
   it('renders hr', () => {
@@ -86,5 +88,30 @@ describe('renderDigestMarkdown', () => {
   it('renders score tier low for 3', () => {
     const md = '## [Low](https://x.com) ⭐️ 3.0/10'
     expect(renderDigestMarkdown(md)).toContain('data-tier="low"')
+  })
+
+  it('folds item markers onto h2 and never shows raw anchors as text', () => {
+    const md = `[[item:1]]\n\n## [Title](https://example.com) ⭐️ 8/10\n\nBody`
+    const html = renderDigestMarkdown(md)
+    expect(html).toContain('id="item-1"')
+    expect(html).toContain('score-badge')
+    expect(html).not.toContain('&lt;a')
+    expect(html).not.toContain('[[item:')
+  })
+
+  it('strips legacy empty anchors instead of showing them as text', () => {
+    const md = `<a id="item-2"></a>\n\n## [Legacy](https://example.com) ⭐️ 7/10\n`
+    const html = renderDigestMarkdown(md)
+    expect(html).toContain('id="item-2"')
+    expect(html).not.toMatch(/&lt;a id/)
+    // No visible empty-anchor residue
+    expect(html).not.toContain('&lt;a id="item-2"')
+  })
+
+  it('renders star without variation selector', () => {
+    const md = '1. [Item](#item-1) ⭐ 9/10'
+    const html = renderDigestMarkdown(md)
+    expect(html).toContain('toc-item')
+    expect(html).toContain('data-tier="high"')
   })
 })

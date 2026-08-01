@@ -63,7 +63,7 @@ describe('DailySummarizer', () => {
     // TOC links to #item-1 — markdown link syntax: [title](#item-1)
     expect(md).toMatch(/\(#item-1\)/)
     // Heading has matching id anchor — fixes the broken original
-    expect(md).toContain('<a id="item-1"></a>')
+    expect(md).toMatch(/\[\[item:1\]\]|<a id="item-1"><\/a>/)
   })
 
   it('omits discussion section when empty', async () => {

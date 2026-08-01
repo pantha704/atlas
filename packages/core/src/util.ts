@@ -146,9 +146,27 @@ export function scoreTier(score: number): 'high' | 'good' | 'mid' | 'low' {
   return 'low'
 }
 
+// Star glyph used in digests: emoji with optional variation selector U+FE0F
+const STAR = '⭐\uFE0F?'
+
 // Render Atlas markdown digest to HTML. Handles score badges, TOC, details, pangu.
 export function renderDigestMarkdown(md: string): string {
+  // Already-rendered HTML (e.g. re-passed through by mistake) — return as-is
+  if (/^\s*<(?:h1|h2|blockquote|div|p|hr)\b/i.test(md) && !md.includes('⭐')) {
+    return md
+  }
+
   let html = md.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+  // Normalize item markers (new [[item:N]] and legacy empty <a id="item-N">)
+  html = html
+    .replace(/\[\[item:(\d+)\]\]/g, '§§ITEM:$1§§')
+    .replace(
+      /&lt;a\s+id=(?:&quot;|"|')item-(\d+)(?:&quot;|"|')\s*(?:\/)?&gt;(?:&lt;\/a&gt;)?/gi,
+      '§§ITEM:$1§§',
+    )
+
+  // Restore intentional embedded markup from the summarizer
   html = html
     .replace(
       /&lt;details&gt;&lt;summary&gt;([\s\S]*?)&lt;\/summary&gt;/g,
@@ -159,32 +177,80 @@ export function renderDigestMarkdown(md: string): string {
     .replace(/&lt;li&gt;/g, '<li>')
     .replace(/&lt;\/li&gt;/g, '</li>')
     .replace(/&lt;\/details&gt;/g, '</details>')
-    .replace(/&lt;a id="item-(\d+)"&gt;&lt;\/a&gt;/g, '<a id="item-$1"></a>')
+
+  // Item headings with score: ## [title](url) ⭐️ N/10  (optional preceding item marker)
   html = html.replace(
-    /^## \[([^\]]+)\]\(([^)]+)\) ⭐️ (\d+(?:\.\d+)?)\/10/gm,
-    (_m, title, url, score) =>
-      `<h2><a href="${url}">${title}</a> <span class="score-badge" data-tier="${scoreTier(Number(score))}">${score}/10</span></h2>`,
+    new RegExp(
+      `^(?:§§ITEM:(\\d+)§§\\s*)?## \\[([^\\]]+)\\]\\(([^)]+)\\) ${STAR} (\\d+(?:\\.\\d+)?)/10`,
+      'gm',
+    ),
+    (_m, anchorId, title, url, score) => {
+      const id = anchorId ? ` id="item-${anchorId}"` : ''
+      return `<h2${id}><a href="${url}" rel="noopener noreferrer">${title}</a> <span class="score-badge" data-tier="${scoreTier(Number(score))}">${score}/10</span></h2>`
+    },
   )
+
+  // Fold remaining item markers onto the next h2
+  html = html.replace(/§§ITEM:(\d+)§§\s*(<h2)(?![^>]*\bid=)/g, '$2 id="item-$1"')
+  // Drop leftover markers (never show raw anchors as text)
+  html = html.replace(/§§ITEM:\d+§§\s*/g, '')
+
+  // TOC: 1. [title](#item-N) ⭐️ N/10
   html = html.replace(
-    /^(\d+)\. \[([^\]]+)\]\(#item-(\d+)\) ⭐️ (\d+(?:\.\d+)?)\/10/gm,
+    new RegExp(
+      `^(\\d+)\\. \\[([^\\]]+)\\]\\(#item-(\\d+)\\) ${STAR} (\\d+(?:\\.\\d+)?)/10`,
+      'gm',
+    ),
     (_m, num, title, id, score) =>
       `<div class="toc-item"><span class="toc-num">${num}.</span> <a href="#item-${id}">${title}</a> <span class="score-badge" data-tier="${scoreTier(Number(score))}">${score}/10</span></div>`,
   )
+
+  // Fallback TOC without markdown links: 1. title ⭐️ N/10
+  html = html.replace(
+    new RegExp(`^(\\d+)\\. (.+?) ${STAR} (\\d+(?:\\.\\d+)?)/10\\s*$`, 'gm'),
+    (_m, num, title, score) =>
+      `<div class="toc-item"><span class="toc-num">${num}.</span> <span>${title.trim()}</span> <span class="score-badge" data-tier="${scoreTier(Number(score))}">${score}/10</span></div>`,
+  )
+
+  // Fallback plain heading (no link): ## title ⭐️ N/10
+  html = html.replace(
+    new RegExp(`^## (.+?) ${STAR} (\\d+(?:\\.\\d+)?)/10\\s*$`, 'gm'),
+    (_m, title, score) =>
+      `<h2>${title.trim()} <span class="score-badge" data-tier="${scoreTier(Number(score))}">${score}/10</span></h2>`,
+  )
+
   html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>')
   html = html.replace(/^---$/gm, '<hr />')
   html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>')
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
+  html = html.replace(
+    /\[([^\]]+)\]\(([^)]+)\)/g,
+    '<a href="$2" rel="noopener noreferrer">$1</a>',
+  )
+
+  // Restore list item links that were intentional HTML from summarizer
+  html = html.replace(
+    /&lt;a href=(?:&quot;|")([^"&]+)(?:&quot;|")&gt;([\s\S]*?)&lt;\/a&gt;/g,
+    '<a href="$1" rel="noopener noreferrer">$2</a>',
+  )
+
   html = html
-    .split('\n\n')
+    .split(/\n\n+/)
     .map((block) => {
       const trimmed = block.trim()
       if (!trimmed) return ''
-      if (/^<(h[12]|blockquote|hr|div|details|ul|ol)/.test(trimmed)) return trimmed
-      if (/^<a id=/.test(trimmed)) return trimmed
+      if (/^<(h[12]|blockquote|hr|div|details|ul|ol|p)\b/i.test(trimmed)) return trimmed
+      if (/^<(?:h[12]|div|hr)\b/i.test(trimmed.split('\n')[0] ?? '')) return trimmed
       return `<p>${trimmed.replace(/\n/g, '<br />')}</p>`
     })
     .join('\n')
+
+  // Final safety: never leave escaped empty item anchors as visible text
+  html = html.replace(
+    /&lt;a\s+id=(?:&quot;|"|')?item-\d+(?:&quot;|"|')?\s*(?:\/)?&gt;(?:&lt;\/a&gt;)?/gi,
+    '',
+  )
+
   return html
 }

@@ -137,8 +137,9 @@ export class DailySummarizer {
       ? `**${labels.tags}**: ${item.aiTags.map((t) => `\`#${t}\``).join(', ')}\n\n`
       : ''
 
-    // Heading has the id that the TOC anchors to — fixes broken original anchors
-    return `<a id="item-${index}"></a>\n\n## [${displayTitle}](${url}) ⭐️ ${score}/10\n\n${displaySummary}\n\n${sourceLine}\n\n${backgroundBlock}${referencesBlock}${discussionBlock}${tagsBlock}---\n\n`
+    // [[item:N]] marker becomes id="item-N" on the h2 in renderDigestMarkdown
+    // (avoids raw empty <a id> tags ever showing as text if HTML render fails)
+    return `[[item:${index}]]\n\n## [${displayTitle}](${url}) ⭐️ ${score}/10\n\n${displaySummary}\n\n${sourceLine}\n\n${backgroundBlock}${referencesBlock}${discussionBlock}${tagsBlock}---\n\n`
   }
 
   private generateEmptySummary(date: string, totalFetched: number, labels: Labels): string {
