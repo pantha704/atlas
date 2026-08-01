@@ -167,6 +167,9 @@ const subtitle =
         <Button id="myDigestBtn" variant="primary" size="sm" class="hidden">
           Generate my digest
         </Button>
+        <Button id="fetchMoreBtn" variant="secondary" size="sm" class="hidden">
+          Fetch more items
+        </Button>
         <Button id="forceDigestBtn" variant="secondary" size="sm" class="hidden">
           Force rescore
         </Button>
@@ -253,44 +256,78 @@ const subtitle =
       if (el) el.textContent = text || ''
     }
 
-    /** Minimal markdown → HTML for client hydrate (no full reload). */
-    function mdToHtml(md) {
-      let h = String(md ?? '')
+    function scoreTier(score) {
+      if (score >= 9) return 'high'
+      if (score >= 7) return 'good'
+      if (score >= 5) return 'mid'
+      return 'low'
+    }
+
+    /**
+     * Port of @atlas/core renderDigestMarkdown — correct TOC, score badges, anchors.
+     * Prefer API `html` when present (same renderer server-side).
+     */
+    function renderDigestMarkdown(md) {
+      let html = String(md ?? '')
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-      h = h.replace(/^### (.+)$/gm, '<h3>$1</h3>')
-      h = h.replace(/^## (.+)$/gm, '<h2>$1</h2>')
-      h = h.replace(/^# (.+)$/gm, '<h1>$1</h1>')
-      h = h.replace(/^---$/gm, '<hr />')
-      h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-      h = h.replace(/`([^`]+)`/g, '<code>$1</code>')
-      h = h.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" rel="noopener noreferrer">$1</a>')
-      h = h.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>')
-      return h
-        .split(/\n\n+/)
-        .map((b) => {
-          const t = b.trim()
-          if (!t) return ''
-          if (/^<(h[123]|hr|blockquote)/.test(t)) return t
-          return `<p>${t.replace(/\n/g, '<br />')}</p>`
+      html = html
+        .replace(
+          /&lt;details&gt;&lt;summary&gt;([\s\S]*?)&lt;\/summary&gt;/g,
+          '<details><summary>$1</summary>',
+        )
+        .replace(/&lt;ul&gt;/g, '<ul>')
+        .replace(/&lt;\/ul&gt;/g, '</ul>')
+        .replace(/&lt;li&gt;/g, '<li>')
+        .replace(/&lt;\/li&gt;/g, '</li>')
+        .replace(/&lt;\/details&gt;/g, '</details>')
+        .replace(/&lt;a id="item-(\d+)"&gt;&lt;\/a&gt;/g, '<a id="item-$1"></a>')
+      html = html.replace(
+        /^## \[([^\]]+)\]\(([^)]+)\) ⭐️ (\d+(?:\.\d+)?)\/10/gm,
+        (_m, title, url, score) =>
+          `<h2><a href="${url}" rel="noopener noreferrer">${title}</a> <span class="score-badge" data-tier="${scoreTier(Number(score))}">${score}/10</span></h2>`,
+      )
+      html = html.replace(
+        /^(\d+)\. \[([^\]]+)\]\(#item-(\d+)\) ⭐️ (\d+(?:\.\d+)?)\/10/gm,
+        (_m, num, title, id, score) =>
+          `<div class="toc-item"><span class="toc-num">${num}.</span> <a href="#item-${id}">${title}</a> <span class="score-badge" data-tier="${scoreTier(Number(score))}">${score}/10</span></div>`,
+      )
+      html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>')
+      html = html.replace(/^---$/gm, '<hr />')
+      html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>')
+      html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
+      html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" rel="noopener noreferrer">$1</a>')
+      html = html
+        .split('\n\n')
+        .map((block) => {
+          const trimmed = block.trim()
+          if (!trimmed) return ''
+          if (/^<(h[12]|blockquote|hr|div|details|ul|ol)/.test(trimmed)) return trimmed
+          if (/^<a id=/.test(trimmed)) return trimmed
+          return `<p>${trimmed.replace(/\n/g, '<br />')}</p>`
         })
         .join('\n')
+      return html
     }
 
-    function showDigest(markdown, badgeLabel) {
+    function showDigest(payload, badgeLabel) {
+      const markdown = typeof payload === 'string' ? payload : payload.markdown
+      const html =
+        typeof payload === 'string'
+          ? renderDigestMarkdown(payload)
+          : payload.html || renderDigestMarkdown(payload.markdown || '')
       const empty = document.getElementById('digest-empty')
       const card = document.getElementById('digest-card')
       const article = document.getElementById('digest-article')
       if (empty) empty.classList.add('hidden')
       if (card) card.classList.remove('hidden')
       if (article) {
-        article.innerHTML = mdToHtml(markdown)
-        article.focus?.()
+        article.innerHTML = html
       }
       const section = document.getElementById('digest-section')
       if (section) section.setAttribute('data-mode', 'personal')
-      // Optional badge in header area via status line
       if (badgeLabel) setStatus(badgeLabel)
     }
 
@@ -300,17 +337,18 @@ const subtitle =
         if (!res.ok) return
         const data = await res.json()
         if (!data.user) return
-        document.getElementById('myDigestBtn')?.classList.remove('hidden')
-        document.getElementById('forceDigestBtn')?.classList.remove('hidden')
+        ;['myDigestBtn', 'forceDigestBtn', 'fetchMoreBtn'].forEach((id) => {
+          document.getElementById(id)?.classList.remove('hidden')
+        })
 
-        // Hydrate personal digest without page reload (avoids infinite refresh loop)
+        // Hydrate personal digest in-place (no reload)
         if (initialMode !== 'personal') {
           try {
             const dig = await fetch(`${apiUrl}/my-digest?peek=1`, { credentials: 'include' })
             if (dig.ok) {
               const body = await dig.json()
-              if (body.markdown) {
-                showDigest(body.markdown, 'Showing your personal digest (cached).')
+              if (body.markdown || body.html) {
+                showDigest(body, 'Showing your personal digest (cached).')
               }
             }
           } catch {}
@@ -318,25 +356,26 @@ const subtitle =
       } catch {}
     }
 
-    async function loadMyDigest(force) {
+    async function loadMyDigest(opts) {
+      const force = !!opts?.force
+      const limit = opts?.limit ?? 15
       setStatus(
         force
-          ? 'Force rescoring (fast mode)…'
-          : 'Generating digest… scoring stored items with AI',
+          ? `Rescoring up to ${limit} items…`
+          : `Generating digest (up to ${limit} items)…`,
       )
       try {
-        const url = force
-          ? `${apiUrl}/my-digest?force=1&fast=1`
-          : `${apiUrl}/my-digest?fast=1`
-        const res = await fetch(url, { credentials: 'include' })
+        const q = new URLSearchParams({ fast: '1', limit: String(limit) })
+        if (force) q.set('force', '1')
+        const res = await fetch(`${apiUrl}/my-digest?${q}`, { credentials: 'include' })
         const data = await res.json()
-        if (res.ok && data.markdown) {
+        if (res.ok && (data.markdown || data.html)) {
           const c = data.itemCounts ?? {}
           showDigest(
-            data.markdown,
+            data,
             c.cached
               ? 'Loaded cached digest.'
-              : `Done — ${c.scored ?? 0} items scored.`,
+              : `Done — ${c.scored ?? 0} items (limit ${c.limit ?? limit}).`,
           )
         } else {
           setStatus(
@@ -358,7 +397,7 @@ const subtitle =
         const res = await fetch(`${apiUrl}/trigger`, { method: 'POST' })
         const data = await res.json()
         if (data.ok) {
-          setStatus(`Pipeline done — ${data.items} items. Click Generate my digest.`)
+          setStatus(`Pipeline done — ${data.items} items. Click Generate or Fetch more.`)
         } else {
           setStatus(`Failed: ${data.error ?? 'unknown'}`)
         }
@@ -371,14 +410,22 @@ const subtitle =
     document.getElementById('myDigestBtn')?.addEventListener('click', async () => {
       const btn = document.getElementById('myDigestBtn')
       if (btn) btn.setAttribute('disabled', 'true')
-      await loadMyDigest(false)
+      await loadMyDigest({ force: false, limit: 15 })
+      if (btn) btn.removeAttribute('disabled')
+    })
+
+    document.getElementById('fetchMoreBtn')?.addEventListener('click', async () => {
+      const btn = document.getElementById('fetchMoreBtn')
+      if (btn) btn.setAttribute('disabled', 'true')
+      // Score more items than default and re-render
+      await loadMyDigest({ force: true, limit: 30 })
       if (btn) btn.removeAttribute('disabled')
     })
 
     document.getElementById('forceDigestBtn')?.addEventListener('click', async () => {
       const btn = document.getElementById('forceDigestBtn')
       if (btn) btn.setAttribute('disabled', 'true')
-      await loadMyDigest(true)
+      await loadMyDigest({ force: true, limit: 15 })
       if (btn) btn.removeAttribute('disabled')
     })
 

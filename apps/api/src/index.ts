@@ -35,6 +35,7 @@ import {
   impactTopN,
   mergeCrossSourceDuplicates,
   mergeTopicDuplicates,
+  renderDigestMarkdown,
   sourceLimitMessage,
 } from '@atlas/core'
 import {
@@ -157,6 +158,7 @@ app.get('/demo/digest', (c) => {
   return summarizer.generateSummary(seeded, today, seeded.length, 'en').then((markdown) =>
     c.json({
       markdown,
+      html: renderDigestMarkdown(markdown),
       items: seeded.map((i) => ({
         id: i.id,
         title: i.title,
@@ -214,7 +216,13 @@ app.get('/digest', async (c) => {
       .where(and(eq(digests.userId, PUBLIC_DIGEST_USER), eq(digests.date, today)))
       .limit(1)
     if (rows[0]?.renderedMd) {
-      return c.json({ markdown: rows[0].renderedMd, generatedAt: rows[0].deliveredAt ?? today, source: 'db' })
+      const md = rows[0].renderedMd
+      return c.json({
+        markdown: md,
+        html: renderDigestMarkdown(md),
+        generatedAt: rows[0].deliveredAt ?? today,
+        source: 'db',
+      })
     }
     // fallback: latest public digest any day
     const latest = await db
@@ -224,8 +232,10 @@ app.get('/digest', async (c) => {
       .orderBy(desc(digests.date))
       .limit(1)
     if (latest[0]?.renderedMd) {
+      const md = latest[0].renderedMd
       return c.json({
-        markdown: latest[0].renderedMd,
+        markdown: md,
+        html: renderDigestMarkdown(md),
         generatedAt: latest[0].date,
         source: 'db',
       })
@@ -235,7 +245,12 @@ app.get('/digest', async (c) => {
   }
   const md = c.env.ATLAS_LAST_DIGEST ?? ''
   if (!md) return c.json({ error: 'no digest yet', markdown: '' }, 404)
-  return c.json({ markdown: md, generatedAt: new Date().toISOString(), source: 'env' })
+  return c.json({
+    markdown: md,
+    html: renderDigestMarkdown(md),
+    generatedAt: new Date().toISOString(),
+    source: 'env',
+  })
 })
 
 app.post('/trigger', async (c) => {
@@ -603,6 +618,7 @@ app.get('/my-digest', async (c) => {
     if (cached?.renderedMd) {
       return c.json({
         markdown: cached.renderedMd,
+        html: renderDigestMarkdown(cached.renderedMd),
         itemCounts: { cached: true },
         digestId: cached.id,
         date: cached.date,
@@ -657,11 +673,13 @@ app.get('/my-digest', async (c) => {
     }
   }
   let merged = mergeFetchedWithStored(live, stored)
-  // Cap work for serverless — score at most 15 newest items
+  // Cap work for serverless — score newest items (limit query, default 15, max 40)
+  const limitRaw = Number(c.req.query('limit') ?? 15)
+  const scoreLimit = Math.min(40, Math.max(5, Number.isFinite(limitRaw) ? limitRaw : 15))
   merged = merged
     .slice()
     .sort((a, b) => (b.publishedAt > a.publishedAt ? 1 : -1))
-    .slice(0, 15)
+    .slice(0, scoreLimit)
 
   if (merged.length === 0) {
     return c.json(
@@ -870,6 +888,7 @@ app.get('/my-digest', async (c) => {
 
   return c.json({
     markdown,
+    html: renderDigestMarkdown(markdown),
     digestId,
     itemCounts: {
       fetched: merged.length,
@@ -878,6 +897,7 @@ app.get('/my-digest', async (c) => {
       scored: deduped.length,
       cached: false,
       fast,
+      limit: scoreLimit,
     },
     plan,
   })
