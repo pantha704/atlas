@@ -6,8 +6,12 @@ import Card from '../components/ui/Card.astro'
 import EmptyState from '../components/ui/EmptyState.astro'
 import PageHeader from '../components/ui/PageHeader.astro'
 import AppShell from '../layouts/AppShell.astro'
+import { getApiBase } from '../lib/api'
 
-const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
+// Absolute base required for SSR (relative /api fails on Vercel Node fetch)
+const API_URL = getApiBase(Astro.url)
+// Browser scripts can keep same-origin relative path
+const CLIENT_API = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
 const cookie = Astro.request.headers.get('cookie') ?? ''
 
 type DigestMode = 'personal' | 'public' | 'demo' | 'empty'
@@ -19,74 +23,72 @@ let itemMeta: { scored?: number; fromCache?: number; newlyScored?: number } | nu
 let userName: string | null = null
 let userPlan: string | null = null
 
+async function fetchJson<T>(
+  path: string,
+  init?: RequestInit & { timeoutMs?: number },
+): Promise<{ ok: boolean; status: number; data: T | null }> {
+  const timeoutMs = init?.timeoutMs ?? 8000
+  try {
+    const res = await fetch(`${API_URL}${path}`, {
+      ...init,
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+    const data = (await res.json().catch(() => null)) as T | null
+    return { ok: res.ok, status: res.status, data }
+  } catch {
+    return { ok: false, status: 0, data: null }
+  }
+}
+
 // 1) Prefer authenticated personal digest (SSR with session cookie)
-try {
-  const meRes = await fetch(`${API_URL}/auth/me`, {
+{
+  const me = await fetchJson<{ user?: { name?: string; plan?: string } | null }>('/auth/me', {
     headers: cookie ? { cookie } : {},
-    signal: AbortSignal.timeout(4000),
+    timeoutMs: 6000,
   })
-  if (meRes.ok) {
-    const me = (await meRes.json()) as { user?: { name?: string; plan?: string } | null }
-    if (me.user) {
-      userName = me.user.name ?? null
-      userPlan = me.user.plan ?? 'free'
-      // peek only — never trigger full score pipeline on page load
-      const digRes = await fetch(`${API_URL}/my-digest?peek=1`, {
-        headers: { cookie },
-        signal: AbortSignal.timeout(5000),
-      })
-      if (digRes.ok) {
-        const data = (await digRes.json()) as {
-          markdown?: string
-          itemCounts?: { scored?: number; fromCache?: number; newlyScored?: number; cached?: boolean }
-        }
-        if (data.markdown) {
-          digestMd = data.markdown
-          mode = 'personal'
-          itemMeta = data.itemCounts ?? null
-        }
-      }
+  if (me.ok && me.data?.user) {
+    userName = me.data.user.name ?? null
+    userPlan = me.data.user.plan ?? 'free'
+    const dig = await fetchJson<{
+      markdown?: string
+      itemCounts?: { scored?: number; fromCache?: number; newlyScored?: number; cached?: boolean }
+    }>('/my-digest?peek=1', {
+      headers: cookie ? { cookie } : {},
+      timeoutMs: 8000,
+    })
+    if (dig.ok && dig.data?.markdown) {
+      digestMd = dig.data.markdown
+      mode = 'personal'
+      itemMeta = dig.data.itemCounts ?? null
     }
-  }
-} catch {
-  // fall through to public
-}
-
-// 2) Public global digest
-if (!digestMd) {
-  try {
-    const res = await fetch(`${API_URL}/digest`, { signal: AbortSignal.timeout(5000) })
-    if (res.ok) {
-      const data = (await res.json()) as { markdown?: string }
-      if (data.markdown) {
-        digestMd = data.markdown
-        mode = 'public'
-      }
-    }
-  } catch {
-    digestError = 'API not reachable. Start the stack with `bun dev`.'
   }
 }
 
-// 3) Demo seed
+// 2) Public global digest (DB-backed)
 if (!digestMd) {
-  try {
-    const res = await fetch(`${API_URL}/demo/digest`, { signal: AbortSignal.timeout(5000) })
-    if (res.ok) {
-      const data = (await res.json()) as { markdown?: string }
-      if (data.markdown) {
-        digestMd = data.markdown
-        mode = 'demo'
-        digestError = null
-      }
-    }
-  } catch {
-    // keep prior error
+  const pub = await fetchJson<{ markdown?: string }>('/digest', { timeoutMs: 8000 })
+  if (pub.ok && pub.data?.markdown) {
+    digestMd = pub.data.markdown
+    mode = 'public'
+  } else if (pub.status === 0) {
+    digestError = 'Could not reach the API from the server. Retry in a moment.'
+  }
+}
+
+// 3) Demo seed — never show empty if demo works
+if (!digestMd) {
+  const demo = await fetchJson<{ markdown?: string }>('/demo/digest', { timeoutMs: 8000 })
+  if (demo.ok && demo.data?.markdown) {
+    digestMd = demo.data.markdown
+    mode = 'demo'
+    digestError = null
   }
 }
 
 if (!digestMd && !digestError) {
-  digestError = 'No digest yet. Run the global pipeline or wait for the daily cron.'
+  digestError = userName
+    ? 'No personal digest yet. Click “Generate my digest” (needs sources + AI keys).'
+    : 'No digest yet. Sign in, add sources, or wait for the daily cron.'
 }
 
 const modeLabel =
@@ -98,9 +100,11 @@ const subtitle =
       ? `Scored for ${userName}. Impact on your stack, not a crowd feed.`
       : 'Scored against your profile and stack.'
     : mode === 'demo'
-      ? 'Seed preview — sign in and connect sources for a real personal digest.'
+      ? 'Preview content — generate your personal digest when ready.'
       : mode === 'public'
-        ? 'Shared global digest. Sign in for per-user scoring and impact.'
+        ? userName
+          ? 'Global digest. Click Generate my digest for personal scores.'
+          : 'Shared global digest. Sign in for per-user scoring and impact.'
         : 'Nothing to show yet.'
 ---
 
@@ -198,7 +202,13 @@ const subtitle =
         >
           <Fragment slot="actions">
             <Button href="/sources" variant="secondary" size="sm">Add sources</Button>
-            <Button href="/signup" variant="primary" size="sm">Sign in</Button>
+            {
+              userName ? (
+                <Button href="/onboarding" variant="primary" size="sm">Finish setup</Button>
+              ) : (
+                <Button href="/signup" variant="primary" size="sm">Sign in</Button>
+              )
+            }
           </Fragment>
         </EmptyState>
       )
@@ -242,7 +252,7 @@ const subtitle =
     </a>
   </div>
 
-  <script is:inline define:vars={{ apiUrl: API_URL, initialMode: mode, initialUser: userName }}>
+  <script is:inline define:vars={{ apiUrl: CLIENT_API, initialMode: mode, initialUser: userName }}>
     function setStatus(text) {
       const el = document.getElementById('triggerStatus')
       if (el) el.textContent = text || ''
@@ -256,6 +266,8 @@ const subtitle =
         if (!data.user) return
         document.getElementById('myDigestBtn')?.classList.remove('hidden')
         document.getElementById('forceDigestBtn')?.classList.remove('hidden')
+        // Hide guest-only CTA if empty state rendered before hydrate
+        document.querySelectorAll('[data-guest-only]').forEach((el) => el.classList.add('hidden'))
       } catch {}
     }
 
