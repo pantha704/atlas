@@ -4,7 +4,8 @@
 /* Dark-mode-first. Achromatic surfaces, single indigo accent (#5e6ad2).
    Score tiers stay semantic: emerald for high, teal for good, amber for mid,
    gray-slate for low — but rebalanced to Linear's muted palette.
-   Inter Variable with 510 signature weight + cv01/ss03 alternates. */
+   Inter (static weights 400–700) — avoid Variable + 510 which fail when
+   the webfont is blocked or axes don't load (invisible button labels). */
 
 @theme {
   /* === Raw palette (Linear-aligned) === */
@@ -67,10 +68,11 @@
   --radius-md: 0.375rem;
   --radius-lg: 0.5rem;
 
-  /* Font — Inter Variable with cv01/ss03, signature 510 weight */
-  --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  --font-weight-emphasis: 510;
+  /* Font — Inter static; weights that always exist on system fallbacks */
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-weight-emphasis: 600;
+  --color-on-primary: #ffffff;
 }
 
 /* === Dark mode (prefers-color-scheme; data-theme override) === */
@@ -103,12 +105,17 @@
 }
 
 /* === Base === */
+html {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
 body {
   background-color: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-sans);
-  font-feature-settings: "cv01", "ss03";
-  -webkit-font-smoothing: antialiased;
   font-weight: 400;
   line-height: 1.5;
 }
@@ -196,23 +203,42 @@ select:focus-visible {
   background: color-mix(in srgb, var(--color-score-mid) 8%, var(--color-surface));
 }
 
-/* Linear signature 510 weight on emphasized UI text */
+/* Emphasized UI text — use 600 so system fallbacks never drop glyphs */
 :where(strong, b, .emphasis) { font-weight: var(--font-weight-emphasis); }
-:where(button, nav a, .nav-link) { font-weight: var(--font-weight-emphasis); }
+:where(button, .nav-link) { font-weight: 500; }
 
 h1, h2, h3, h4 {
   letter-spacing: -0.022em;
-  font-weight: 510;
+  font-weight: 600;
+  color: var(--color-text);
 }
 
-a {
+/*
+  Content link color only — NEVER style all anchors globally.
+  Primary CTA buttons are <a class="bg-primary text-white">; a global
+  `a { color: accent }` painted the label the same indigo as the button
+  (invisible "Sign in" / "Get started" on production).
+*/
+a:not([class]) {
   color: var(--color-accent);
   text-decoration: none;
   transition: color 120ms ease;
 }
-a:hover {
+a:not([class]):hover {
   color: var(--color-primary-hover);
   text-decoration: none;
+}
+
+/* Hard guarantee: filled primary controls always show white labels */
+a.bg-primary,
+button.bg-primary,
+.bg-primary {
+  color: var(--color-on-primary) !important;
+}
+a.bg-primary:hover,
+button.bg-primary:hover,
+.bg-primary:hover {
+  color: var(--color-on-primary) !important;
 }
 
 /* === Score badge — semantic tiers === */
@@ -247,15 +273,17 @@ a:hover {
 }
 .prose-atlas h1 {
   font-size: var(--text-3xl);
-  font-weight: 590;
+  font-weight: 600;
   letter-spacing: -0.022em;
   margin: 0 0 1rem;
+  color: var(--color-text);
 }
 .prose-atlas h2 {
   font-size: var(--text-2xl);
-  font-weight: 590;
+  font-weight: 600;
   letter-spacing: -0.018em;
   margin: 2rem 0 1rem;
+  color: var(--color-text);
 }
 .prose-atlas h2 a {
   color: var(--color-text);

@@ -25,11 +25,12 @@ const base =
   'inline-flex items-center justify-center gap-2 rounded-md font-medium transition-[color,background-color,border-color,opacity] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-bg)] disabled:pointer-events-none disabled:opacity-50'
 
 const variants: Record<string, string> = {
-  primary: 'bg-primary text-white hover:bg-primary-hover shadow-sm',
+  // text-[#fff] + bg-primary: global CSS also forces on-primary for a.bg-primary
+  primary: 'bg-primary text-[#ffffff] hover:bg-primary-hover shadow-sm no-underline',
   secondary:
-    'border border-border bg-surface text-text hover:border-primary/50 hover:bg-surface-2',
-  ghost: 'text-text-muted hover:bg-surface-2 hover:text-text',
-  danger: 'border border-rose-500/25 bg-rose-500/10 text-rose-500 hover:bg-rose-500/20',
+    'border border-border bg-surface text-text hover:border-primary/50 hover:bg-surface-2 no-underline',
+  ghost: 'text-text-muted hover:bg-surface-2 hover:text-text no-underline',
+  danger: 'border border-rose-500/25 bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 no-underline',
 }
 
 const sizes: Record<string, string> = {
