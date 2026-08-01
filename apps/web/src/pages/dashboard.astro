@@ -176,34 +176,39 @@ const showAuthActions = Boolean(userName)
   <!-- Toolbar -->
   <Card class="mt-6" padding="sm">
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div class="flex flex-wrap items-center gap-2">
-        <Button
+      <div class="flex flex-wrap items-center gap-2" id="digest-actions">
+        <!-- Use HTML hidden attr (not Tailwind class) so client can toggle reliably -->
+        <button
+          type="button"
           id="myDigestBtn"
-          variant="primary"
-          size="sm"
-          class={showAuthActions ? '' : 'hidden'}
+          class="inline-flex h-8 items-center justify-center gap-2 rounded-md bg-primary px-3 text-xs font-medium text-[#ffffff] shadow-sm hover:bg-primary-hover disabled:opacity-50"
+          hidden={!showAuthActions}
         >
           Generate my digest
-        </Button>
-        <Button
+        </button>
+        <button
+          type="button"
           id="fetchMoreBtn"
-          variant="secondary"
-          size="sm"
-          class={showAuthActions ? '' : 'hidden'}
+          class="inline-flex h-8 items-center justify-center gap-2 rounded-md border border-border bg-surface px-3 text-xs font-medium text-text hover:border-primary/50 hover:bg-surface-2 disabled:opacity-50"
+          hidden={!showAuthActions}
         >
           Fetch more (30)
-        </Button>
-        <Button
+        </button>
+        <button
+          type="button"
           id="forceDigestBtn"
-          variant="secondary"
-          size="sm"
-          class={showAuthActions ? '' : 'hidden'}
+          class="inline-flex h-8 items-center justify-center gap-2 rounded-md border border-border bg-surface px-3 text-xs font-medium text-text hover:border-primary/50 hover:bg-surface-2 disabled:opacity-50"
+          hidden={!showAuthActions}
         >
           Force rescore
-        </Button>
-        <Button id="triggerBtn" variant="ghost" size="sm">
+        </button>
+        <button
+          type="button"
+          id="triggerBtn"
+          class="inline-flex h-8 items-center justify-center gap-2 rounded-md px-3 text-xs font-medium text-text-muted hover:bg-surface-2 hover:text-text disabled:opacity-50"
+        >
           Run global pipeline
-        </Button>
+        </button>
       </div>
       <p id="triggerStatus" class="text-xs text-text-muted sm:text-right" aria-live="polite"></p>
     </div>
@@ -278,10 +283,30 @@ const showAuthActions = Boolean(userName)
     </a>
   </div>
 
-  <script is:inline define:vars={{ apiUrl: CLIENT_API, initialMode: mode }}>
+  <script is:inline define:vars={{ apiUrl: CLIENT_API, initialMode: mode, ssrAuthed: showAuthActions }}>
     function setStatus(text) {
       const el = document.getElementById('triggerStatus')
       if (el) el.textContent = text || ''
+    }
+
+    /** Safe JSON parse — Astro CSRF / HTML error pages are not JSON */
+    async function readJson(res) {
+      const text = await res.text()
+      try {
+        return { ok: res.ok, status: res.status, data: JSON.parse(text), raw: text }
+      } catch {
+        const snippet = (text || '').replace(/\s+/g, ' ').slice(0, 160)
+        return {
+          ok: false,
+          status: res.status,
+          data: {
+            error:
+              snippet ||
+              `Request failed (${res.status}). Expected JSON from API.`,
+          },
+          raw: text,
+        }
+      }
     }
 
     function scoreTier(score) {
@@ -422,15 +447,25 @@ const showAuthActions = Boolean(userName)
     }
 
     function showDigest(payload, badgeLabel) {
-      // Prefer server-rendered html — never re-escape good HTML
+      // Prefer client re-render from markdown (always current renderer).
+      // Use API html only when it already has score badges and no escaped junk.
       let html
       if (typeof payload === 'string') {
         html = renderDigestMarkdown(payload)
-      } else if (payload && typeof payload.html === 'string' && payload.html.trim()) {
-        html = payload.html
       } else {
-        html = renderDigestMarkdown((payload && payload.markdown) || '')
+        const md = (payload && payload.markdown) || ''
+        const apiHtml = (payload && payload.html) || ''
+        const apiHtmlLooksGood =
+          apiHtml.includes('score-badge') &&
+          !apiHtml.includes('&lt;a') &&
+          !apiHtml.includes('&lt;a id')
+        html = apiHtmlLooksGood && apiHtml.trim() ? apiHtml : renderDigestMarkdown(md || apiHtml)
       }
+      // Strip leftover escaped/empty anchors so they never appear as text
+      html = html
+        .replace(/&lt;a\s+id=["']?item-\d+["']?\s*(?:\/)?&gt;(?:&lt;\/a&gt;)?/gi, '')
+        .replace(/<a\s+id="item-\d+"\s*><\/a>\s*/g, '')
+
       const empty = document.getElementById('digest-empty')
       const card = document.getElementById('digest-card')
       const article = document.getElementById('digest-article')
@@ -438,6 +473,10 @@ const showAuthActions = Boolean(userName)
       if (card) card.classList.remove('hidden')
       if (article) {
         article.innerHTML = html
+        // DOM cleanup: remove empty item anchors if any slipped through as real nodes
+        article.querySelectorAll('a[id^="item-"]').forEach((a) => {
+          if (!a.getAttribute('href') && !(a.textContent || '').trim()) a.remove()
+        })
       }
       const section = document.getElementById('digest-section')
       if (section) section.setAttribute('data-mode', 'personal')
@@ -446,32 +485,33 @@ const showAuthActions = Boolean(userName)
 
     function revealAuthButtons() {
       ;['myDigestBtn', 'forceDigestBtn', 'fetchMoreBtn'].forEach((id) => {
-        document.getElementById(id)?.classList.remove('hidden')
+        const el = document.getElementById(id)
+        if (el) {
+          el.hidden = false
+          el.removeAttribute('hidden')
+          el.classList.remove('hidden')
+        }
       })
     }
 
     async function checkAuth() {
       try {
         const res = await fetch(`${apiUrl}/auth/me`, { credentials: 'include' })
-        if (!res.ok) return
-        const data = await res.json()
-        if (!data.user) return
+        const { data } = await readJson(res)
+        if (!data?.user) return
         revealAuthButtons()
 
         // Always hydrate from API html so cached digests render correctly
-        // (SSR may have missed the session cookie on edge)
         try {
           const dig = await fetch(`${apiUrl}/my-digest?peek=1`, { credentials: 'include' })
-          if (dig.ok) {
-            const body = await dig.json()
-            if (body.html || body.markdown) {
-              showDigest(
-                body,
-                initialMode === 'personal'
-                  ? 'Showing your personal digest.'
-                  : 'Showing your personal digest (cached).',
-              )
-            }
+          const body = await readJson(dig)
+          if (body.ok && (body.data?.html || body.data?.markdown)) {
+            showDigest(
+              body.data,
+              initialMode === 'personal'
+                ? 'Showing your personal digest.'
+                : 'Showing your personal digest (cached).',
+            )
           }
         } catch {}
       } catch {}
@@ -489,8 +529,8 @@ const showAuthActions = Boolean(userName)
         const q = new URLSearchParams({ fast: '1', limit: String(limit) })
         if (force) q.set('force', '1')
         const res = await fetch(`${apiUrl}/my-digest?${q}`, { credentials: 'include' })
-        const data = await res.json()
-        if (res.ok && (data.markdown || data.html)) {
+        const { ok, data } = await readJson(res)
+        if (ok && (data?.markdown || data?.html)) {
           const c = data.itemCounts ?? {}
           showDigest(
             data,
@@ -500,8 +540,8 @@ const showAuthActions = Boolean(userName)
           )
         } else {
           setStatus(
-            data.error ??
-              data.code ??
+            data?.error ??
+              data?.code ??
               'Generate failed. Ensure sources exist and GROQ_API_KEY is set.',
           )
         }
@@ -513,14 +553,22 @@ const showAuthActions = Boolean(userName)
     document.getElementById('triggerBtn')?.addEventListener('click', async () => {
       const btn = document.getElementById('triggerBtn')
       if (btn) btn.setAttribute('disabled', 'true')
-      setStatus('Running global pipeline… this can take a few minutes')
+      setStatus('Fetching latest sources… (light pipeline, ~30s)')
       try {
-        const res = await fetch(`${apiUrl}/trigger`, { method: 'POST' })
-        const data = await res.json()
-        if (data.ok) {
-          setStatus(`Pipeline done — ${data.items} items. Click Generate or Fetch more.`)
+        // Content-Type required so Astro CSRF (if re-enabled) treats this as JSON, not a form
+        const res = await fetch(`${apiUrl}/trigger`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: '{}',
+        })
+        const { ok, data } = await readJson(res)
+        if (ok && data?.ok) {
+          setStatus(
+            `Fetched ${data.items ?? 0} items (stored ${data.stored ?? 0}). Click Generate or Fetch more (30).`,
+          )
         } else {
-          setStatus(`Failed: ${data.error ?? 'unknown'}`)
+          setStatus(`Failed: ${data?.error ?? `HTTP ${res.status}`}`)
         }
       } catch (e) {
         setStatus(`Error: ${e.message}`)
@@ -538,7 +586,6 @@ const showAuthActions = Boolean(userName)
     document.getElementById('fetchMoreBtn')?.addEventListener('click', async () => {
       const btn = document.getElementById('fetchMoreBtn')
       if (btn) btn.setAttribute('disabled', 'true')
-      // Score more items than default and re-render
       await loadMyDigest({ force: true, limit: 30 })
       if (btn) btn.removeAttribute('disabled')
     })
@@ -550,6 +597,8 @@ const showAuthActions = Boolean(userName)
       if (btn) btn.removeAttribute('disabled')
     })
 
+    // SSR already unhid buttons when session was known; checkAuth covers cookie-only clients
+    if (ssrAuthed) revealAuthButtons()
     checkAuth()
   </script>
 </AppShell>

@@ -254,10 +254,12 @@ app.get('/digest', async (c) => {
 })
 
 app.post('/trigger', async (c) => {
-  return runGlobalFetch(c.env).then((result) => {
-    if (!result.ok) return c.json(result, 500)
-    return c.json(result)
-  })
+  // fast=1 (default): scrape + store items only — finishes under serverless limits.
+  // full=1: full orchestrator + public digest (cron / explicit full run).
+  const full = c.req.query('full') === '1'
+  const result = full ? await runGlobalFetch(c.env) : await runLightGlobalFetch(c.env)
+  if (!result.ok) return c.json(result, 500)
+  return c.json(result)
 })
 
 // Vercel Cron / external schedulers — Authorization: Bearer $CRON_SECRET
@@ -1467,16 +1469,58 @@ async function upsertUserFromGithub(
   return { id, email, name, plan: 'free' }
 }
 
-/** Global fetch once: store raw items + public digest. Per-user scoring is on-demand. */
+/**
+ * Light global fetch for dashboard button — scrape sources + store items only.
+ * No AI scoring / public digest (user "Generate my digest" handles personal scores).
+ * Stays within Vercel serverless time limits.
+ */
+async function runLightGlobalFetch(env: Env): Promise<{
+  ok: boolean
+  items?: number
+  stored?: number
+  mode?: string
+  error?: string
+  status?: number
+}> {
+  try {
+    const config: Config = {
+      ...DEFAULT_CONFIG,
+      ai: buildAIConfig(env),
+    }
+    const since = new Date(Date.now() - Math.max(config.filtering.timeWindowHours, 48) * 3600 * 1000)
+    const live = await fetchAllSources(config, since)
+    const db = getDB(env)
+    const idMap = await storeGlobalItems(db, live)
+    return {
+      ok: true,
+      items: live.length,
+      stored: idMap.size,
+      mode: 'light',
+    }
+  } catch (err) {
+    reportError(env, err, { path: '/trigger', extra: { stage: 'runLightGlobalFetch' } })
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+      status: 500,
+    }
+  }
+}
+
+/** Full global fetch: AI pipeline + store items + public digest. Used by cron. */
 async function runGlobalFetch(env: Env): Promise<{
   ok: boolean
   items?: number
   stored?: number
   log?: unknown
+  mode?: string
   error?: string
   status?: number
 }> {
   if (!env.GROQ_API_KEY) {
+    // Fall back to light fetch so cron/button still populate items
+    const light = await runLightGlobalFetch(env)
+    if (light.ok) return { ...light, mode: 'light-no-groq' }
     return { ok: false, error: 'GROQ_API_KEY not configured', status: 500 }
   }
   const config: Config = { ...DEFAULT_CONFIG, ai: buildAIConfig(env) }
@@ -1531,6 +1575,7 @@ async function runGlobalFetch(env: Env): Promise<{
       items: result.items.length,
       stored: idMap.size,
       log: result.log,
+      mode: 'full',
     }
   } catch (err) {
     reportError(env, err, { path: '/cron/fetch', extra: { stage: 'runGlobalFetch' } })
