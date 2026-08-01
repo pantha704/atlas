@@ -396,14 +396,32 @@ app.get('/sources', async (c) => {
 app.post('/sources', async (c) => {
   const user = await requireAuth(c.req.raw, c.env, getDB(c.env))
   if (!user) return c.json({ error: 'unauthorized' }, 401)
-  const body = (await c.req.json()) as {
-    type: string
-    config: Record<string, unknown>
-    enabled?: boolean
+  let body: { type?: string; config?: Record<string, unknown>; enabled?: boolean }
+  try {
+    body = (await c.req.json()) as {
+      type?: string
+      config?: Record<string, unknown>
+      enabled?: boolean
+    }
+  } catch {
+    return c.json({ error: 'invalid JSON body' }, 400)
   }
-  if (!body.type || !body.config) return c.json({ error: 'type and config required' }, 400)
+  if (!body.type || !body.config || typeof body.config !== 'object') {
+    return c.json({ error: 'type and config required' }, 400)
+  }
   const validTypes = ['hackernews', 'rss', 'github', 'arxiv', 'reddit', 'telegram', 'ossinsight']
   if (!validTypes.includes(body.type)) return c.json({ error: 'invalid source type' }, 400)
+
+  // Light validation so bad configs never land in DB
+  const cfg = body.config
+  if (body.type === 'rss' && !cfg.url) return c.json({ error: 'rss config requires url' }, 400)
+  if (body.type === 'github') {
+    const ok =
+      (cfg.type === 'repo_releases' && cfg.owner && cfg.repo) ||
+      (cfg.type === 'user_events' && cfg.username) ||
+      (cfg.owner && cfg.repo)
+    if (!ok) return c.json({ error: 'github config requires owner/repo or username' }, 400)
+  }
 
   const db = getDB(c.env)
   const plan = user.plan as Plan
@@ -417,14 +435,19 @@ app.post('/sources', async (c) => {
   }
 
   const id = crypto.randomUUID()
+  const enabled = body.enabled ?? true
   await db.insert(sources).values({
     id,
     userId: user.id,
     type: body.type as typeof sources.$inferInsert.type,
     config: JSON.stringify(body.config),
-    enabled: body.enabled ?? true,
+    enabled,
   })
-  return c.json({ ok: true, id })
+  return c.json({
+    ok: true,
+    id,
+    source: { id, type: body.type, config: JSON.stringify(body.config), enabled },
+  })
 })
 
 app.delete('/sources/:id', async (c) => {
@@ -1376,16 +1399,21 @@ function buildUserConfig(
   userSources: Array<{ type: string; config: string; enabled: boolean }>,
   defaults: Config['sources'],
 ): Config['sources'] {
-  // ponytail: merge user sources over defaults. User sources override; defaults fill gaps.
-  // For v0.1, we use user sources if any exist, else fall back to defaults.
+  // Use user sources when any exist; otherwise fall back to product defaults.
+  // Multiple rows of the same singleton type (arxiv/reddit/telegram/hn/ossinsight)
+  // are MERGED so the UI can add categories/subreddits one at a time.
   if (userSources.length === 0) return defaults
-  // Parse user source configs
-  const parsed = userSources.map((s) => ({
-    type: s.type,
-    config: JSON.parse(s.config),
-    enabled: s.enabled,
-  }))
-  // Build config from user sources — group by type
+
+  const parsed = userSources.map((s) => {
+    let config: Record<string, unknown> = {}
+    try {
+      config = JSON.parse(s.config) as Record<string, unknown>
+    } catch {
+      config = {}
+    }
+    return { type: s.type, config, enabled: s.enabled }
+  })
+
   const config: Config['sources'] = {
     github: [],
     hackernews: { enabled: false, fetchTopStories: 30, minScore: 150 },
@@ -1402,45 +1430,188 @@ function buildUserConfig(
       maxItems: 20,
     },
   }
+
   for (const s of parsed) {
     if (!s.enabled) continue
     switch (s.type) {
-      case 'hackernews':
-        config.hackernews = {
-          enabled: true,
-          ...(s.config as Record<string, unknown>),
-        } as Config['sources']['hackernews']
+      case 'hackernews': {
+        // Prefer the most permissive enabled HN config
+        const top = Number(s.config.fetchTopStories ?? 30)
+        const min = Number(s.config.minScore ?? 150)
+        if (!config.hackernews.enabled) {
+          config.hackernews = {
+            enabled: true,
+            fetchTopStories: top,
+            minScore: min,
+          }
+        } else {
+          config.hackernews.fetchTopStories = Math.max(config.hackernews.fetchTopStories, top)
+          config.hackernews.minScore = Math.min(config.hackernews.minScore, min)
+        }
         break
-      case 'rss':
-        config.rss.push(s.config as Config['sources']['rss'][0])
+      }
+      case 'rss': {
+        const url = String(s.config.url ?? '')
+        if (!url) break
+        config.rss.push({
+          name: String(s.config.name ?? url),
+          url,
+          enabled: s.config.enabled !== false,
+          category: typeof s.config.category === 'string' ? s.config.category : undefined,
+        })
         break
-      case 'github':
-        config.github.push(s.config as Config['sources']['github'][0])
+      }
+      case 'github': {
+        const gh = s.config as {
+          type?: string
+          owner?: string
+          repo?: string
+          username?: string
+          enabled?: boolean
+        }
+        if (gh.type === 'user_events' && gh.username) {
+          config.github.push({
+            type: 'user_events',
+            username: gh.username,
+            enabled: gh.enabled !== false,
+          })
+        } else if (gh.owner && gh.repo) {
+          config.github.push({
+            type: 'repo_releases',
+            owner: gh.owner,
+            repo: gh.repo,
+            enabled: gh.enabled !== false,
+          })
+        }
         break
-      case 'arxiv':
-        config.arxiv = {
-          enabled: true,
-          ...(s.config as Record<string, unknown>),
-        } as Config['sources']['arxiv']
+      }
+      case 'arxiv': {
+        config.arxiv.enabled = true
+        const cats = Array.isArray(s.config.categories) ? s.config.categories : []
+        for (const cat of cats) {
+          if (cat && typeof cat === 'object' && 'category' in cat) {
+            const c = cat as { category: string; enabled?: boolean }
+            if (!config.arxiv.categories.some((x) => x.category === c.category)) {
+              config.arxiv.categories.push({
+                category: String(c.category),
+                enabled: c.enabled !== false,
+              })
+            }
+          } else if (typeof cat === 'string') {
+            if (!config.arxiv.categories.some((x) => x.category === cat)) {
+              config.arxiv.categories.push({ category: cat, enabled: true })
+            }
+          }
+        }
+        // Also accept a bare category string from simple add form shape
+        if (typeof s.config.category === 'string' && s.config.category) {
+          const cat = s.config.category
+          if (!config.arxiv.categories.some((x) => x.category === cat)) {
+            config.arxiv.categories.push({ category: cat, enabled: true })
+          }
+        }
+        const maxR = Number(s.config.maxResults ?? 30)
+        if (Number.isFinite(maxR)) {
+          config.arxiv.maxResults = Math.max(config.arxiv.maxResults, maxR)
+        }
         break
-      case 'reddit':
-        config.reddit = {
-          enabled: true,
-          ...(s.config as Record<string, unknown>),
-        } as Config['sources']['reddit']
+      }
+      case 'reddit': {
+        config.reddit.enabled = true
+        const subs = Array.isArray(s.config.subreddits) ? s.config.subreddits : []
+        for (const sub of subs) {
+          if (sub && typeof sub === 'object' && 'subreddit' in sub) {
+            const r = sub as {
+              subreddit: string
+              enabled?: boolean
+              sort?: string
+              timeFilter?: string
+              fetchLimit?: number
+              minScore?: number
+            }
+            if (!config.reddit.subreddits.some((x) => x.subreddit === r.subreddit)) {
+              config.reddit.subreddits.push({
+                subreddit: String(r.subreddit),
+                enabled: r.enabled !== false,
+                sort: (r.sort as 'hot') ?? 'hot',
+                timeFilter: (r.timeFilter as 'day') ?? 'day',
+                fetchLimit: r.fetchLimit ?? 25,
+                minScore: r.minScore ?? 10,
+              })
+            }
+          }
+        }
+        if (typeof s.config.subreddit === 'string' && s.config.subreddit) {
+          const name = s.config.subreddit
+          if (!config.reddit.subreddits.some((x) => x.subreddit === name)) {
+            config.reddit.subreddits.push({
+              subreddit: name,
+              enabled: true,
+              sort: 'hot',
+              timeFilter: 'day',
+              fetchLimit: 25,
+              minScore: 10,
+            })
+          }
+        }
+        const fc = Number(s.config.fetchComments ?? 5)
+        if (Number.isFinite(fc)) {
+          config.reddit.fetchComments = Math.max(config.reddit.fetchComments, fc)
+        }
         break
-      case 'telegram':
-        config.telegram = {
-          enabled: true,
-          ...(s.config as Record<string, unknown>),
-        } as Config['sources']['telegram']
+      }
+      case 'telegram': {
+        config.telegram.enabled = true
+        const channels = Array.isArray(s.config.channels) ? s.config.channels : []
+        for (const ch of channels) {
+          if (ch && typeof ch === 'object' && 'channel' in ch) {
+            const c = ch as { channel: string; enabled?: boolean; fetchLimit?: number }
+            if (!config.telegram.channels.some((x) => x.channel === c.channel)) {
+              config.telegram.channels.push({
+                channel: String(c.channel),
+                enabled: c.enabled !== false,
+                fetchLimit: c.fetchLimit ?? 20,
+              })
+            }
+          }
+        }
+        if (typeof s.config.channel === 'string' && s.config.channel) {
+          const name = s.config.channel
+          if (!config.telegram.channels.some((x) => x.channel === name)) {
+            config.telegram.channels.push({ channel: name, enabled: true, fetchLimit: 20 })
+          }
+        }
         break
-      case 'ossinsight':
-        config.ossinsight = {
-          enabled: true,
-          ...(s.config as Record<string, unknown>),
-        } as Config['sources']['ossinsight']
+      }
+      case 'ossinsight': {
+        // Prefer first enabled ossinsight; union languages/keywords if more exist
+        if (!config.ossinsight.enabled) {
+          config.ossinsight = {
+            enabled: true,
+            period: (s.config.period as Config['sources']['ossinsight']['period']) ?? 'past_24_hours',
+            languages: Array.isArray(s.config.languages)
+              ? (s.config.languages as string[])
+              : ['All'],
+            keywords: Array.isArray(s.config.keywords) ? (s.config.keywords as string[]) : [],
+            minStars: Number(s.config.minStars ?? 50),
+            maxItems: Number(s.config.maxItems ?? 20),
+          }
+        } else {
+          const langs = Array.isArray(s.config.languages) ? (s.config.languages as string[]) : []
+          for (const l of langs) {
+            if (!config.ossinsight.languages.includes(l)) config.ossinsight.languages.push(l)
+          }
+          const kws = Array.isArray(s.config.keywords) ? (s.config.keywords as string[]) : []
+          for (const k of kws) {
+            if (!config.ossinsight.keywords.includes(k)) config.ossinsight.keywords.push(k)
+          }
+          config.ossinsight.maxItems = Math.max(
+            config.ossinsight.maxItems,
+            Number(s.config.maxItems ?? 20),
+          )
+        }
         break
+      }
     }
   }
   return config

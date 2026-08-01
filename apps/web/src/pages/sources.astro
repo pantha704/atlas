@@ -15,72 +15,165 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
     </Fragment>
   </PageHeader>
 
-    <div id="sources-list" class="mt-8 space-y-3">
-      <div class="atlas-skeleton h-20 w-full" aria-hidden="true"></div>
-      <div class="atlas-skeleton h-20 w-full" aria-hidden="true"></div>
-      <p class="sr-only">Loading your sources…</p>
+  <div id="sources-list" class="mt-8 space-y-3">
+    <div class="atlas-skeleton h-20 w-full" aria-hidden="true"></div>
+    <div class="atlas-skeleton h-20 w-full" aria-hidden="true"></div>
+    <p class="sr-only">Loading your sources…</p>
+  </div>
+  <p id="list-status" class="mt-2 text-xs text-text-muted" aria-live="polite"></p>
+
+  <!-- Add source form -->
+  <Card class="mt-10">
+    <h2 class="text-base font-medium text-text">Add a source</h2>
+    <p class="mt-1 text-xs text-text-muted">
+      Free plan: up to 10 sources. Multiple arXiv/Reddit entries are merged when scoring.
+    </p>
+
+    <div class="mt-4 grid gap-4 sm:grid-cols-2">
+      <div>
+        <label for="add-type" class="block text-sm font-medium text-text">Type</label>
+        <select
+          id="add-type"
+          class="mt-2 w-full rounded-lg border border-border bg-surface p-3 text-text focus:border-primary focus:outline-none"
+        >
+          <option value="rss">RSS feed</option>
+          <option value="github">GitHub repo releases</option>
+          <option value="telegram">Telegram channel</option>
+          <option value="hackernews">Hacker News</option>
+          <option value="arxiv">arXiv category</option>
+          <option value="reddit">Reddit subreddit</option>
+          <option value="ossinsight">OSS Insight trending</option>
+        </select>
+      </div>
+      <div id="config-fields">
+        <label for="add-config" class="block text-sm font-medium text-text" id="add-config-label"
+          >URL / repo / channel</label
+        >
+        <input
+          id="add-config"
+          type="text"
+          placeholder="https://example.com/feed.xml"
+          class="mt-2 w-full rounded-lg border border-border bg-surface p-3 text-text placeholder:text-text-muted focus:border-primary focus:outline-none"
+        />
+        <p id="add-hint" class="mt-1.5 text-xs text-text-muted"></p>
+      </div>
     </div>
 
-    <!-- Add source form -->
-    <Card class="mt-10">
-      <h2 class="text-base font-medium text-text">Add a source</h2>
-
-      <div class="mt-4 grid gap-4 sm:grid-cols-2">
-        <div>
-          <label for="add-type" class="block text-sm font-medium text-text">Type</label>
-          <select id="add-type" class="mt-2 w-full rounded-lg border border-border bg-surface p-3 text-text focus:border-primary focus:outline-none">
-            <option value="rss">RSS feed</option>
-            <option value="github">GitHub repo releases</option>
-            <option value="telegram">Telegram channel</option>
-            <option value="hackernews">Hacker News</option>
-            <option value="arxiv">arXiv category</option>
-            <option value="reddit">Reddit subreddit</option>
-            <option value="ossinsight">OSS Insight trending</option>
-          </select>
-        </div>
-        <div id="config-fields">
-          <label for="add-config" class="block text-sm font-medium text-text">URL / repo / channel</label>
-          <input id="add-config" type="text" placeholder="https://example.com/feed.xml" class="mt-2 w-full rounded-lg border border-border bg-surface p-3 text-text placeholder:text-text-muted focus:border-primary focus:outline-none" />
-        </div>
-      </div>
-
-      <Button id="add-source-btn" variant="primary" size="sm" class="mt-4">
-        Add source
-      </Button>
-      <p id="add-status" class="mt-2 text-sm text-text-muted" aria-live="polite"></p>
-    </Card>
+    <Button id="add-source-btn" variant="primary" size="sm" class="mt-4"> Add source </Button>
+    <p id="add-status" class="mt-2 text-sm text-text-muted" aria-live="polite"></p>
+  </Card>
 
   <script is:inline define:vars={{ apiUrl: API_URL }}>
-    const typePlaceholders = {
-      rss: 'https://example.com/feed.xml',
-      github: 'owner/repo (e.g. openai/codex)',
-      telegram: 'channel name (e.g. ai_china)',
-      hackernews: 'auto-configured (leave empty)',
-      arxiv: 'category (e.g. cs.AI)',
-      reddit: 'subreddit (e.g. MachineLearning)',
-      ossinsight: 'auto-configured (leave empty)',
+    const typeMeta = {
+      rss: {
+        label: 'Feed URL',
+        placeholder: 'https://example.com/feed.xml',
+        hint: 'Full RSS or Atom URL',
+      },
+      github: {
+        label: 'owner/repo',
+        placeholder: 'openai/codex',
+        hint: 'Tracks GitHub releases for that repo',
+      },
+      telegram: {
+        label: 'Channel',
+        placeholder: 'ai_china',
+        hint: 'Public channel username without @',
+      },
+      hackernews: {
+        label: 'Config (optional)',
+        placeholder: 'leave empty — uses defaults',
+        hint: 'Top 30 stories, min 100 points',
+      },
+      arxiv: {
+        label: 'Category',
+        placeholder: 'cs.AI',
+        hint: 'e.g. cs.AI, cs.LG, cs.CL, stat.ML',
+      },
+      reddit: {
+        label: 'Subreddit',
+        placeholder: 'MachineLearning',
+        hint: 'Without r/ prefix',
+      },
+      ossinsight: {
+        label: 'Config (optional)',
+        placeholder: 'leave empty — uses defaults',
+        hint: 'Trending repos, past 24 hours',
+      },
     }
 
     const typeEl = document.getElementById('add-type')
     const configEl = document.getElementById('add-config')
-    typeEl?.addEventListener('change', () => {
-      if (configEl) configEl.placeholder = typePlaceholders[typeEl.value] ?? ''
-    })
+    const configLabel = document.getElementById('add-config-label')
+    const addHint = document.getElementById('add-hint')
+
+    function applyTypeUI() {
+      const meta = typeMeta[typeEl?.value] ?? typeMeta.rss
+      if (configEl) configEl.placeholder = meta.placeholder
+      if (configLabel) configLabel.textContent = meta.label
+      if (addHint) addHint.textContent = meta.hint
+      const auto = typeEl?.value === 'hackernews' || typeEl?.value === 'ossinsight'
+      if (configEl) {
+        configEl.disabled = auto
+        configEl.classList.toggle('opacity-50', auto)
+      }
+    }
+    typeEl?.addEventListener('change', applyTypeUI)
+    applyTypeUI()
+
+    function esc(s) {
+      return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+    }
+
+    async function readJson(res) {
+      const text = await res.text()
+      try {
+        return { ok: res.ok, status: res.status, data: JSON.parse(text) }
+      } catch {
+        return {
+          ok: false,
+          status: res.status,
+          data: { error: (text || `HTTP ${res.status}`).slice(0, 160) },
+        }
+      }
+    }
+
+    function setListStatus(msg) {
+      const el = document.getElementById('list-status')
+      if (el) el.textContent = msg || ''
+    }
 
     async function loadSources() {
       try {
         const res = await fetch(`${apiUrl}/sources`, { credentials: 'include' })
-        if (!res.ok) {
-          if (res.status === 401) {
-            location.href = '/signup'
-            return
-          }
-          throw new Error('Failed to load')
+        if (res.status === 401) {
+          location.href = '/signup'
+          return
         }
-        const data = await res.json()
+        const { ok, data } = await readJson(res)
+        if (!ok) throw new Error(data?.error || 'Failed to load sources')
         renderSources(data.sources ?? [])
+        setListStatus(
+          data.sources?.length
+            ? `${data.sources.length} source${data.sources.length === 1 ? '' : 's'}`
+            : '',
+        )
       } catch (e) {
-        document.getElementById('sources-list').innerHTML = `<div class="atlas-banner" data-tone="warn">Error: ${e.message}</div>`
+        document.getElementById('sources-list').innerHTML =
+          `<div class="atlas-banner" data-tone="warn">Error: ${esc(e.message)}</div>`
+      }
+    }
+
+    function parseConfig(raw) {
+      if (raw && typeof raw === 'object') return raw
+      try {
+        return JSON.parse(raw || '{}')
+      } catch {
+        return {}
       }
     }
 
@@ -93,107 +186,222 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
         </div>`
         return
       }
-      container.innerHTML = sources.map(s => {
-        const config = JSON.parse(s.config)
-        const label = sourceLabel(s.type, config)
-        return `<div class="flex flex-col gap-3 rounded-md border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between">
+      container.innerHTML = sources
+        .map((s) => {
+          const config = parseConfig(s.config)
+          const label = sourceLabel(s.type, config)
+          const enabled = !!s.enabled
+          return `<div class="flex flex-col gap-3 rounded-md border border-border bg-surface p-4 sm:flex-row sm:items-center sm:justify-between" data-source-id="${esc(s.id)}">
           <div class="flex min-w-0 items-center gap-3">
-            <span class="shrink-0 rounded-md border border-border bg-surface-2 px-2 py-1 text-[11px] font-mono text-text-muted">${s.type}</span>
+            <span class="shrink-0 rounded-md border border-border bg-surface-2 px-2 py-1 text-[11px] font-mono text-text-muted">${esc(s.type)}</span>
             <div class="min-w-0">
-              <div class="truncate text-sm font-medium text-text">${label}</div>
-              <div class="text-xs text-text-muted">${s.enabled ? 'Enabled' : 'Disabled'}</div>
+              <div class="truncate text-sm font-medium text-text">${esc(label)}</div>
+              <div class="text-xs text-text-muted">${enabled ? 'Enabled' : 'Disabled'}</div>
             </div>
           </div>
           <div class="flex shrink-0 gap-2">
-            <button type="button" onclick="toggleSource('${s.id}', ${!s.enabled})" class="h-8 rounded-md border border-border px-3 text-xs font-medium text-text hover:border-primary/50">${s.enabled ? 'Disable' : 'Enable'}</button>
-            <button type="button" onclick="deleteSource('${s.id}')" class="h-8 rounded-md border border-rose-500/25 px-3 text-xs font-medium text-rose-500 hover:bg-rose-500/10">Delete</button>
+            <button type="button" data-action="toggle" data-id="${esc(s.id)}" data-enabled="${enabled ? '0' : '1'}" class="h-8 rounded-md border border-border px-3 text-xs font-medium text-text hover:border-primary/50">${enabled ? 'Disable' : 'Enable'}</button>
+            <button type="button" data-action="delete" data-id="${esc(s.id)}" class="h-8 rounded-md border border-rose-500/25 px-3 text-xs font-medium text-rose-500 hover:bg-rose-500/10">Delete</button>
           </div>
         </div>`
-      }).join('')
+        })
+        .join('')
+
+      // Event delegation (no inline onclick / XSS)
+      container.querySelectorAll('[data-action="toggle"]').forEach((btn) => {
+        btn.addEventListener('click', () =>
+          toggleSource(btn.getAttribute('data-id'), btn.getAttribute('data-enabled') === '1'),
+        )
+      })
+      container.querySelectorAll('[data-action="delete"]').forEach((btn) => {
+        btn.addEventListener('click', () => deleteSource(btn.getAttribute('data-id')))
+      })
     }
 
     function sourceLabel(type, config) {
       switch (type) {
-        case 'rss': return config.name || config.url
-        case 'github': return `${config.owner}/${config.repo}`
-        case 'telegram': return `@${config.channel || config.channels?.[0]?.channel}`
-        case 'hackernews': return `HN (top ${config.fetchTopStories ?? 30}, min ${config.minScore ?? 100}pts)`
-        case 'arxiv': return `arXiv: ${(config.categories ?? []).map(c => c.category).join(', ')}`
-        case 'reddit': return (config.subreddits ?? []).map(s => `r/${s.subreddit}`).join(', ')
-        case 'ossinsight': return `OSS Insight (${config.period ?? '24h'})`
-        default: return 'Unknown'
+        case 'rss':
+          return config.name || config.url || 'RSS feed'
+        case 'github':
+          if (config.type === 'user_events') return `@${config.username || '?'}`
+          return `${config.owner || '?'}/${config.repo || '?'}`
+        case 'telegram': {
+          const ch =
+            config.channel ||
+            config.channels?.[0]?.channel ||
+            (Array.isArray(config.channels) ? config.channels[0] : null)
+          return ch ? `@${ch}` : 'Telegram'
+        }
+        case 'hackernews':
+          return `HN (top ${config.fetchTopStories ?? 30}, min ${config.minScore ?? 100}pts)`
+        case 'arxiv': {
+          const cats = (config.categories ?? [])
+            .map((c) => (typeof c === 'string' ? c : c.category))
+            .filter(Boolean)
+          if (config.category) cats.push(config.category)
+          return cats.length ? `arXiv: ${cats.join(', ')}` : 'arXiv'
+        }
+        case 'reddit': {
+          const subs = (config.subreddits ?? [])
+            .map((s) => (typeof s === 'string' ? s : s.subreddit))
+            .filter(Boolean)
+          if (config.subreddit) subs.push(config.subreddit)
+          return subs.length ? subs.map((s) => `r/${s}`).join(', ') : 'Reddit'
+        }
+        case 'ossinsight':
+          return `OSS Insight (${config.period ?? 'past_24_hours'})`
+        default:
+          return type || 'Unknown'
       }
     }
 
-    window.toggleSource = async (id, enabled) => {
-      await fetch(`${apiUrl}/sources/${id}`, {
-        method: 'PATCH',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled }),
-      })
-      loadSources()
+    async function toggleSource(id, enabled) {
+      setListStatus(enabled ? 'Enabling…' : 'Disabling…')
+      try {
+        const res = await fetch(`${apiUrl}/sources/${id}`, {
+          method: 'PATCH',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ enabled }),
+        })
+        const { ok, data } = await readJson(res)
+        if (!ok) throw new Error(data?.error || `Failed (${res.status})`)
+        await loadSources()
+        setListStatus(enabled ? 'Enabled.' : 'Disabled.')
+      } catch (e) {
+        setListStatus(`Error: ${e.message}`)
+      }
     }
 
-    window.deleteSource = async (id) => {
-      if (!confirm('Delete this source?')) return
-      await fetch(`${apiUrl}/sources/${id}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      })
-      loadSources()
+    async function deleteSource(id) {
+      if (!confirm('Delete this source? This cannot be undone.')) return
+      setListStatus('Deleting…')
+      try {
+        const res = await fetch(`${apiUrl}/sources/${id}`, {
+          method: 'DELETE',
+          credentials: 'include',
+          headers: { Accept: 'application/json' },
+        })
+        const { ok, data } = await readJson(res)
+        if (!ok) throw new Error(data?.error || `Failed (${res.status})`)
+        await loadSources()
+        setListStatus('Deleted.')
+      } catch (e) {
+        setListStatus(`Error: ${e.message}`)
+      }
+    }
+
+    function buildConfig(type, configVal) {
+      switch (type) {
+        case 'rss': {
+          if (!configVal) throw new Error('Feed URL required')
+          let url = configVal
+          if (!/^https?:\/\//i.test(url)) url = `https://${url}`
+          try {
+            new URL(url)
+          } catch {
+            throw new Error('Invalid feed URL')
+          }
+          return { name: url, url, enabled: true }
+        }
+        case 'github': {
+          const cleaned = configVal.replace(/^https?:\/\/github\.com\//i, '').replace(/\.git$/, '')
+          if (!cleaned.includes('/')) throw new Error('Use owner/repo (e.g. openai/codex)')
+          const [owner, repo] = cleaned.split('/').filter(Boolean)
+          if (!owner || !repo) throw new Error('Use owner/repo (e.g. openai/codex)')
+          return { type: 'repo_releases', owner, repo, enabled: true }
+        }
+        case 'telegram': {
+          if (!configVal) throw new Error('Channel name required')
+          const channel = configVal.replace(/^@/, '')
+          return {
+            enabled: true,
+            channels: [{ channel, enabled: true, fetchLimit: 20 }],
+          }
+        }
+        case 'hackernews':
+          return { enabled: true, fetchTopStories: 30, minScore: 100 }
+        case 'arxiv': {
+          if (!configVal) throw new Error('Category required (e.g. cs.AI)')
+          const category = configVal.replace(/^arxiv:/i, '').trim()
+          return {
+            enabled: true,
+            categories: [{ category, enabled: true }],
+            maxResults: 30,
+          }
+        }
+        case 'reddit': {
+          if (!configVal) throw new Error('Subreddit required')
+          const subreddit = configVal.replace(/^r\//i, '').trim()
+          return {
+            enabled: true,
+            subreddits: [
+              {
+                subreddit,
+                enabled: true,
+                sort: 'hot',
+                timeFilter: 'day',
+                fetchLimit: 25,
+                minScore: 10,
+              },
+            ],
+            users: [],
+            fetchComments: 5,
+          }
+        }
+        case 'ossinsight':
+          return {
+            enabled: true,
+            period: 'past_24_hours',
+            languages: ['All'],
+            keywords: [],
+            minStars: 50,
+            maxItems: 20,
+          }
+        default:
+          throw new Error('Unknown source type')
+      }
     }
 
     document.getElementById('add-source-btn')?.addEventListener('click', async () => {
       const type = typeEl?.value
       const configVal = configEl?.value?.trim()
       const status = document.getElementById('add-status')
-      let config = {}
-
-      switch (type) {
-        case 'rss':
-          if (!configVal) return alert('URL required')
-          config = { name: configVal, url: configVal, enabled: true }
-          break
-        case 'github':
-          if (!configVal?.includes('/')) return alert('owner/repo required')
-          const [owner, repo] = configVal.split('/')
-          config = { type: 'repo_releases', owner, repo, enabled: true }
-          break
-        case 'telegram':
-          if (!configVal) return alert('channel required')
-          config = { enabled: true, channels: [{ channel: configVal, enabled: true, fetchLimit: 20 }] }
-          break
-        case 'hackernews':
-          config = { enabled: true, fetchTopStories: 30, minScore: 150 }
-          break
-        case 'arxiv':
-          if (!configVal) return alert('category required')
-          config = { enabled: true, categories: [{ category: configVal, enabled: true }], maxResults: 30 }
-          break
-        case 'reddit':
-          if (!configVal) return alert('subreddit required')
-          config = { enabled: true, subreddits: [{ subreddit: configVal, enabled: true, sort: 'hot', timeFilter: 'day', fetchLimit: 25, minScore: 10 }], users: [], fetchComments: 5 }
-          break
-        case 'ossinsight':
-          config = { enabled: true, period: 'past_24_hours', languages: ['All'], keywords: [], minStars: 50, maxItems: 20 }
-          break
-      }
-
+      const btn = document.getElementById('add-source-btn')
       try {
-        status.textContent = 'Adding...'
+        const config = buildConfig(type, configVal)
+        status.textContent = 'Adding…'
+        if (btn) btn.setAttribute('disabled', 'true')
         const res = await fetch(`${apiUrl}/sources`, {
           method: 'POST',
           credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify({ type, config, enabled: true }),
         })
-        if (!res.ok) throw new Error('Failed')
+        const { ok, data } = await readJson(res)
+        if (!ok) {
+          throw new Error(
+            data?.error ||
+              (data?.code === 'source_limit'
+                ? 'Source limit reached. Upgrade to Pro for unlimited sources.'
+                : `Failed (${res.status})`),
+          )
+        }
         status.textContent = 'Added!'
-        if (configEl) configEl.value = ''
-        loadSources()
+        if (configEl && !configEl.disabled) configEl.value = ''
+        await loadSources()
       } catch (e) {
         status.textContent = `Error: ${e.message}`
+      } finally {
+        if (btn) btn.removeAttribute('disabled')
+      }
+    })
+
+    // Enter key submits add form
+    configEl?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        document.getElementById('add-source-btn')?.click()
       }
     })
 

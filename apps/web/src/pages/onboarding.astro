@@ -110,8 +110,8 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
         <label class="flex items-center gap-3 rounded-md border border-border bg-surface p-4 cursor-pointer transition-colors hover:border-primary/50 has-[:checked]:border-primary/40">
           <input type="checkbox" data-source="github-releases" checked class="h-4 w-4 rounded border-border" />
           <div>
-            <div class="font-medium text-text">GitHub: vLLM, SGLang, Triton releases</div>
-            <div class="text-sm text-text-muted">Inference engine releases, auto-tracked</div>
+            <div class="font-medium text-text">GitHub: vLLM, SGLang, openai/triton releases</div>
+            <div class="text-sm text-text-muted">Three release feeds (counts as 3 sources)</div>
           </div>
         </label>
         <label class="flex items-center gap-3 rounded-md border border-border bg-surface p-4 cursor-pointer transition-colors hover:border-primary/50 has-[:checked]:border-primary/40">
@@ -236,24 +236,21 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
 
         // Save custom sources
         for (const cs of customSources) {
-          await fetch(`${apiUrl}/sources`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(cs),
-          })
+          await postSource(cs)
         }
 
-        status.textContent = 'Profile saved. Generating your personalized digest... (~2-5 min)'
-
-        // Trigger per-user digest
-        const digestRes = await fetch(`${apiUrl}/my-digest`, { credentials: 'include' })
+        status.textContent = 'Profile saved. Generating your personalized digest…'
+        // Fast path so serverless doesn't time out
+        const digestRes = await fetch(`${apiUrl}/my-digest?fast=1&limit=15`, {
+          credentials: 'include',
+        })
         if (digestRes.ok) {
-          status.textContent = 'Done! Redirecting to your dashboard...'
-          setTimeout(() => location.href = '/dashboard', 2000)
+          status.textContent = 'Done! Redirecting to your dashboard…'
+          setTimeout(() => (location.href = '/dashboard'), 1200)
         } else {
-          status.textContent = 'Profile saved. Your digest will be ready shortly. Going to dashboard...'
-          setTimeout(() => location.href = '/dashboard', 2000)
+          status.textContent =
+            'Profile & sources saved. Generate your digest from the dashboard…'
+          setTimeout(() => (location.href = '/dashboard'), 1500)
         }
       } catch (e) {
         status.textContent = `Error: ${e.message}`
@@ -295,23 +292,117 @@ const API_URL = import.meta.env.PUBLIC_ATLAS_API_URL ?? '/api'
       }).join('')
     }
 
+    async function postSource(payload) {
+      const res = await fetch(`${apiUrl}/sources`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const text = await res.text()
+      let data = {}
+      try {
+        data = JSON.parse(text)
+      } catch {
+        data = { error: text.slice(0, 120) }
+      }
+      if (!res.ok) {
+        throw new Error(data.error || data.code || `Failed to add source (${res.status})`)
+      }
+      return data
+    }
+
     async function addSource(key) {
+      // github-releases expands to three repos (matches the label)
+      if (key === 'github-releases') {
+        const repos = [
+          { owner: 'vllm-project', repo: 'vllm' },
+          { owner: 'sgl-project', repo: 'sglang' },
+          { owner: 'openai', repo: 'triton' },
+        ]
+        for (const r of repos) {
+          await postSource({
+            type: 'github',
+            config: { type: 'repo_releases', owner: r.owner, repo: r.repo, enabled: true },
+            enabled: true,
+          })
+        }
+        return
+      }
+
       const configs = {
-        hackernews: { type: 'hackernews', config: { enabled: true, fetchTopStories: 30, minScore: 150 }, enabled: true },
-        'arxiv-ai': { type: 'arxiv', config: { enabled: true, categories: [{ category: 'cs.AI', enabled: true }, { category: 'cs.LG', enabled: true }], maxResults: 30 }, enabled: true },
-        'arxiv-cl': { type: 'arxiv', config: { enabled: true, categories: [{ category: 'cs.CL', enabled: true }, { category: 'stat.ML', enabled: true }], maxResults: 30 }, enabled: true },
-        'reddit-ml': { type: 'reddit', config: { enabled: true, subreddits: [{ subreddit: 'MachineLearning', enabled: true, sort: 'hot', timeFilter: 'day', fetchLimit: 25, minScore: 10 }, { subreddit: 'LocalLLaMA', enabled: true, sort: 'hot', timeFilter: 'day', fetchLimit: 25, minScore: 10 }], users: [], fetchComments: 5 }, enabled: true },
-        'github-releases': { type: 'github', config: { type: 'repo_releases', owner: 'vllm-project', repo: 'vllm', enabled: true }, enabled: true },
-        ossinsight: { type: 'ossinsight', config: { enabled: true, period: 'past_24_hours', languages: ['All', 'Python', 'TypeScript'], keywords: [], minStars: 50, maxItems: 20 }, enabled: true },
+        hackernews: {
+          type: 'hackernews',
+          config: { enabled: true, fetchTopStories: 30, minScore: 100 },
+          enabled: true,
+        },
+        'arxiv-ai': {
+          type: 'arxiv',
+          config: {
+            enabled: true,
+            categories: [
+              { category: 'cs.AI', enabled: true },
+              { category: 'cs.LG', enabled: true },
+            ],
+            maxResults: 30,
+          },
+          enabled: true,
+        },
+        'arxiv-cl': {
+          type: 'arxiv',
+          config: {
+            enabled: true,
+            categories: [
+              { category: 'cs.CL', enabled: true },
+              { category: 'stat.ML', enabled: true },
+            ],
+            maxResults: 30,
+          },
+          enabled: true,
+        },
+        'reddit-ml': {
+          type: 'reddit',
+          config: {
+            enabled: true,
+            subreddits: [
+              {
+                subreddit: 'MachineLearning',
+                enabled: true,
+                sort: 'hot',
+                timeFilter: 'day',
+                fetchLimit: 25,
+                minScore: 10,
+              },
+              {
+                subreddit: 'LocalLLaMA',
+                enabled: true,
+                sort: 'hot',
+                timeFilter: 'day',
+                fetchLimit: 25,
+                minScore: 10,
+              },
+            ],
+            users: [],
+            fetchComments: 5,
+          },
+          enabled: true,
+        },
+        ossinsight: {
+          type: 'ossinsight',
+          config: {
+            enabled: true,
+            period: 'past_24_hours',
+            languages: ['All', 'Python', 'TypeScript'],
+            keywords: [],
+            minStars: 50,
+            maxItems: 20,
+          },
+          enabled: true,
+        },
       }
       const cfg = configs[key]
       if (!cfg) return
-      await fetch(`${apiUrl}/sources`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cfg),
-      })
+      await postSource(cfg)
     }
 
     function showStep(n) {
