@@ -192,39 +192,34 @@ const subtitle =
   </Card>
 
   <!-- Digest body -->
-  <section class="mt-8" aria-labelledby="digest-heading">
+  <section id="digest-section" class="mt-8" aria-labelledby="digest-heading" data-mode={mode}>
     <h2 id="digest-heading" class="sr-only">Digest content</h2>
-    {
-      digestError && !digestMd && (
-        <EmptyState
-          title="No digest yet"
-          description={digestError}
-        >
-          <Fragment slot="actions">
-            <Button href="/sources" variant="secondary" size="sm">Add sources</Button>
-            {
-              userName ? (
-                <Button href="/onboarding" variant="primary" size="sm">Finish setup</Button>
-              ) : (
-                <Button href="/signup" variant="primary" size="sm">Sign in</Button>
-              )
-            }
-          </Fragment>
-        </EmptyState>
-      )
-    }
-
-    {
-      digestMd && (
-        <Card padding="lg" class="overflow-hidden">
-          <article
-            class="prose-atlas max-w-none"
-            tabindex="0"
-            set:html={renderDigestMarkdown(digestMd)}
-          />
-        </Card>
-      )
-    }
+    <div id="digest-empty" class={digestMd ? 'hidden' : ''}>
+      {
+        digestError && !digestMd && (
+          <EmptyState title="No digest yet" description={digestError}>
+            <Fragment slot="actions">
+              <Button href="/sources" variant="secondary" size="sm">Add sources</Button>
+              {
+                userName ? (
+                  <Button href="/onboarding" variant="primary" size="sm">Finish setup</Button>
+                ) : (
+                  <Button href="/signup" variant="primary" size="sm">Sign in</Button>
+                )
+              }
+            </Fragment>
+          </EmptyState>
+        )
+      }
+    </div>
+    <div id="digest-card" class:list={['atlas-card overflow-hidden p-6 sm:p-8', !digestMd && 'hidden']}>
+      <article
+        id="digest-article"
+        class="prose-atlas max-w-none"
+        tabindex="0"
+        set:html={digestMd ? renderDigestMarkdown(digestMd) : ''}
+      />
+    </div>
   </section>
 
   <!-- Quick links -->
@@ -252,10 +247,51 @@ const subtitle =
     </a>
   </div>
 
-  <script is:inline define:vars={{ apiUrl: CLIENT_API, initialMode: mode, initialUser: userName }}>
+  <script is:inline define:vars={{ apiUrl: CLIENT_API, initialMode: mode }}>
     function setStatus(text) {
       const el = document.getElementById('triggerStatus')
       if (el) el.textContent = text || ''
+    }
+
+    /** Minimal markdown → HTML for client hydrate (no full reload). */
+    function mdToHtml(md) {
+      let h = String(md ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+      h = h.replace(/^### (.+)$/gm, '<h3>$1</h3>')
+      h = h.replace(/^## (.+)$/gm, '<h2>$1</h2>')
+      h = h.replace(/^# (.+)$/gm, '<h1>$1</h1>')
+      h = h.replace(/^---$/gm, '<hr />')
+      h = h.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      h = h.replace(/`([^`]+)`/g, '<code>$1</code>')
+      h = h.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" rel="noopener noreferrer">$1</a>')
+      h = h.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>')
+      return h
+        .split(/\n\n+/)
+        .map((b) => {
+          const t = b.trim()
+          if (!t) return ''
+          if (/^<(h[123]|hr|blockquote)/.test(t)) return t
+          return `<p>${t.replace(/\n/g, '<br />')}</p>`
+        })
+        .join('\n')
+    }
+
+    function showDigest(markdown, badgeLabel) {
+      const empty = document.getElementById('digest-empty')
+      const card = document.getElementById('digest-card')
+      const article = document.getElementById('digest-article')
+      if (empty) empty.classList.add('hidden')
+      if (card) card.classList.remove('hidden')
+      if (article) {
+        article.innerHTML = mdToHtml(markdown)
+        article.focus?.()
+      }
+      const section = document.getElementById('digest-section')
+      if (section) section.setAttribute('data-mode', 'personal')
+      // Optional badge in header area via status line
+      if (badgeLabel) setStatus(badgeLabel)
     }
 
     async function checkAuth() {
@@ -266,17 +302,15 @@ const subtitle =
         if (!data.user) return
         document.getElementById('myDigestBtn')?.classList.remove('hidden')
         document.getElementById('forceDigestBtn')?.classList.remove('hidden')
-        document.querySelectorAll('[data-guest-only]').forEach((el) => el.classList.add('hidden'))
-        // If SSR missed personal digest, load cached one from API and refresh
+
+        // Hydrate personal digest without page reload (avoids infinite refresh loop)
         if (initialMode !== 'personal') {
           try {
             const dig = await fetch(`${apiUrl}/my-digest?peek=1`, { credentials: 'include' })
             if (dig.ok) {
               const body = await dig.json()
               if (body.markdown) {
-                setStatus('Loading your personal digest…')
-                setTimeout(() => location.reload(), 400)
-                return
+                showDigest(body.markdown, 'Showing your personal digest (cached).')
               }
             }
           } catch {}
@@ -291,7 +325,6 @@ const subtitle =
           : 'Generating digest… scoring stored items with AI',
       )
       try {
-        // fast=1 is default server-side; force still uses fast for serverless timeout
         const url = force
           ? `${apiUrl}/my-digest?force=1&fast=1`
           : `${apiUrl}/my-digest?fast=1`
@@ -299,12 +332,12 @@ const subtitle =
         const data = await res.json()
         if (res.ok && data.markdown) {
           const c = data.itemCounts ?? {}
-          setStatus(
+          showDigest(
+            data.markdown,
             c.cached
-              ? 'Loaded cached digest — refreshing…'
-              : `Done — ${c.scored ?? 0} scored items. Refreshing…`,
+              ? 'Loaded cached digest.'
+              : `Done — ${c.scored ?? 0} items scored.`,
           )
-          setTimeout(() => location.reload(), 500)
         } else {
           setStatus(
             data.error ??
@@ -325,16 +358,14 @@ const subtitle =
         const res = await fetch(`${apiUrl}/trigger`, { method: 'POST' })
         const data = await res.json()
         if (data.ok) {
-          setStatus(`Pipeline done — ${data.items} items. Reloading…`)
-          setTimeout(() => location.reload(), 1500)
+          setStatus(`Pipeline done — ${data.items} items. Click Generate my digest.`)
         } else {
           setStatus(`Failed: ${data.error ?? 'unknown'}`)
-          if (btn) btn.removeAttribute('disabled')
         }
       } catch (e) {
         setStatus(`Error: ${e.message}`)
-        if (btn) btn.removeAttribute('disabled')
       }
+      if (btn) btn.removeAttribute('disabled')
     })
 
     document.getElementById('myDigestBtn')?.addEventListener('click', async () => {
