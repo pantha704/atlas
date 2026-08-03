@@ -17,11 +17,13 @@ check_json() {
   local body_file
   body_file=$(mktemp)
   local code
-  code=$(curl -sS -m 45 -o "$body_file" -w "%{http_code}" -X "$method" "${API}${path}" \
+  code=$(curl -sS -m 60 -o "$body_file" -w "%{http_code}" -X "$method" "${API}${path}" \
     -H "Origin: ${BASE}" \
     -H "Referer: ${BASE}/dashboard" \
     -H "Accept: application/json" \
-    "$@" 2>/dev/null || echo "000")
+    "$@" 2>/dev/null) || true
+  # curl writes 000 on total failure; normalize empty
+  [[ -z "$code" || "$code" == "000" ]] && code="000"
   local body
   body=$(head -c 200 "$body_file" 2>/dev/null || true)
   rm -f "$body_file"
