@@ -22,7 +22,7 @@ export function billingConfigured(env: BillingEnv): boolean {
 }
 
 function siteUrl(env: BillingEnv): string {
-  return (env.WEB_URL ?? env.APP_URL ?? 'https://atlas.pages.dev').replace(/\/$/, '')
+  return (env.WEB_URL ?? env.APP_URL ?? 'https://atlas-nine-ashy.vercel.app').replace(/\/$/, '')
 }
 
 function basicAuth(env: BillingEnv): string {

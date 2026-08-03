@@ -8,7 +8,7 @@ describe('renderEmailHtml', () => {
     expect(html).toContain('Atlas')
     expect(html).toContain('Test Subject')
     expect(html).toContain('Powered by')
-    expect(html).toContain('atlas.pages.dev')
+    expect(html).toContain('atlas-nine-ashy.vercel.app')
   })
 
   it('renders markdown content in email body', () => {

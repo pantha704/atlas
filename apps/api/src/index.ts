@@ -175,14 +175,14 @@ app.get('/demo/digest', (c) => {
 app.get('/rss/:token.xml', async (c) => {
   const token = c.req.param('token') as string
   const db = getDB(c.env)
-  const siteUrl = (c.env.APP_URL ?? 'https://atlas.pages.dev') as string
+  const siteUrl = (c.env.APP_URL ?? 'https://atlas-nine-ashy.vercel.app') as string
   return handleRssFeed(token, db, siteUrl)
 })
 
 // v0.7: Sitemap
 app.get('/sitemap.xml', async (c) => {
   const db = getDB(c.env)
-  const siteUrl = (c.env.APP_URL ?? 'https://atlas.pages.dev') as string
+  const siteUrl = (c.env.APP_URL ?? 'https://atlas-nine-ashy.vercel.app') as string
   const marketSources = await db
     .select({ id: publicSources.id, createdAt: publicSources.createdAt })
     .from(publicSources)
@@ -869,7 +869,7 @@ app.get('/my-digest', async (c) => {
   // 6. Delivery — pro only (skip on fast to keep under timeout)
   if (!fast) {
     const deliveryPrefs = parseDeliveryPrefs(profileRow[0]?.deliveryPrefs)
-    const siteUrl = (c.env.WEB_URL ?? c.env.APP_URL ?? 'https://atlas.pages.dev') as string
+    const siteUrl = (c.env.WEB_URL ?? c.env.APP_URL ?? 'https://atlas-nine-ashy.vercel.app') as string
     const subject = `Atlas — Your Daily Digest (${today})`
 
     if (deliveryPrefs.email && user.email && canUseDelivery(plan, 'email')) {

@@ -54,7 +54,7 @@ export function renderEmailHtml(digestMd: string, title: string): string {
     ${body}
   </td></tr>
   <tr><td style="padding:16px 32px;border-top:1px solid #e7e3dc;background:#f4f2ef;">
-    <span style="font-size:12px;color:#6b6580;">Powered by <a href="https://atlas.pages.dev" style="color:#4f46e5;text-decoration:none;">Atlas</a></span>
+    <span style="font-size:12px;color:#6b6580;">Powered by <a href="https://atlas-nine-ashy.vercel.app" style="color:#4f46e5;text-decoration:none;">Atlas</a></span>
   </td></tr>
 </table>
 </td></tr></table>

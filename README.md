@@ -2,6 +2,8 @@
 
 **Your personal news agent.** Connect your sources — Atlas tells you what changed, what it means for your stack, and what to do next.
 
+**Live:** [atlas-nine-ashy.vercel.app](https://atlas-nine-ashy.vercel.app) · **Repo:** [github.com/pantha704/atlas](https://github.com/pantha704/atlas)
+
 [![CI](https://github.com/pantha704/atlas/actions/workflows/ci.yml/badge.svg)](https://github.com/pantha704/atlas/actions/workflows/ci.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](./LICENSE)
 
@@ -23,7 +25,7 @@ Atlas is a personal news agent, not a feed. It scores every item against _your_ 
 ┌─────────────┐     ┌──────────────┐     ┌──────────────┐
 │  Dashboard  │◀────│  Summarizer  │◀────│  AI Scoring  │
 │  /email/    │     │  EN + ZH     │     │  per-user    │
-│  /rss/webhook│    └──────────────┘     │  Groq+Gemini │
+│  /rss/webhook│    └──────────────┘     │  Groq        │
 └─────────────┘                          └──────┬───────┘
                                                 │
                                          ┌──────▼───────┐
@@ -33,8 +35,8 @@ Atlas is a personal news agent, not a feed. It scores every item against _your_ 
                                          └──────────────┘
 ```
 
-1. **Connect sources** — GitHub repos, arXiv, RSS, HN, Reddit, Telegram, OSS Insight. Or browse the [source market](https://atlas.pages.dev/market).
-2. **Atlas fetches daily** — deduplicates across sources, scores 0-10 against your profile.
+1. **Connect sources** — GitHub repos, arXiv, RSS, HN, Reddit, Telegram, OSS Insight. Or browse the [source market](https://atlas-nine-ashy.vercel.app/market).
+2. **Atlas fetches daily** — deduplicates across sources, scores 0–10 against your profile.
 3. **Impact reasoning** — for your top items, a reasoning model answers: does this affect your stack? what should you do?
 4. **Deliver** — web dashboard, email, RSS, or webhook. EN + 中文.
 
@@ -46,7 +48,7 @@ Atlas is a personal news agent, not a feed. It scores every item against _your_ 
 
 ## Stack
 
-Astro · Hono · Cloudflare Workers · Turso (libSQL) · Drizzle · Groq + Gemini · Tailwind v4. Every service on a free tier.
+Astro (SSR) · Hono API · Vercel · Turso (libSQL) · Drizzle · Groq · Tailwind v4 · Razorpay (billing). Designed to run on free tiers.
 
 ## Quick start
 
@@ -54,25 +56,37 @@ Astro · Hono · Cloudflare Workers · Turso (libSQL) · Drizzle · Groq + Gemin
 git clone https://github.com/pantha704/atlas.git
 cd atlas
 bun install
-cp .env.example .env  # fill in GROQ_API_KEY
+cp .env.example .env   # GROQ_API_KEY, Turso, GitHub OAuth, secrets
 bun dev
 ```
 
-## Self-host (15 min, $0)
+Open `http://localhost:4321` (web) — API is served under `/api` in the monorepo layout.
+
+## Deploy (Vercel + Turso)
+
+Production today:
+
+| Piece | Service |
+|-------|---------|
+| Web + API | [Vercel](https://vercel.com) (`apps/web` + `/api/*` route) |
+| Database | [Turso](https://turso.tech) |
+| AI | [Groq](https://console.groq.com) |
+| Auth | GitHub OAuth |
 
 ```bash
-bun install
-cp .env.example .env  # fill in keys
+# Link project, set env (TURSO_*, GROQ_API_KEY, GITHUB_*, BETTER_AUTH_SECRET,
+# APP_URL / WEB_URL = https://atlas-nine-ashy.vercel.app)
+# GitHub OAuth callback:
+#   https://atlas-nine-ashy.vercel.app/api/auth/callback
 bun run build
-bunx wrangler deploy  # API → CF Workers
-# Deploy apps/web → CF Pages
+# Deploy via Vercel Git integration or: bunx vercel --prod
 ```
 
-See [docs](https://atlas.pages.dev/docs) for full guide.
+See in-app [docs](https://atlas-nine-ashy.vercel.app/docs) for the full guide.
 
 ## Status
 
-v1.0 — stable. 93 tests, typecheck green, lint clean. See [ROADMAP](./ROADMAP.md).
+Active production on Vercel. Auth, personal digests, sources, and market are live. See [ROADMAP](./ROADMAP.md) and [EXECUTION_PLAN](./EXECUTION_PLAN.md).
 
 ## Contributing
 

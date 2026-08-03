@@ -11,7 +11,7 @@ export interface AuthEnv {
   GITHUB_CLIENT_ID: string
   GITHUB_CLIENT_SECRET: string
   BETTER_AUTH_SECRET: string
-  APP_URL: string // e.g. https://atlas.pages.dev
+  APP_URL: string // e.g. https://atlas-nine-ashy.vercel.app
 }
 
 export interface SessionUser {
