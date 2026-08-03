@@ -254,8 +254,16 @@ app.get('/digest', async (c) => {
 })
 
 app.post('/trigger', async (c) => {
-  // fast=1 (default): scrape + store items only — finishes under serverless limits.
-  // full=1: full orchestrator + public digest (cron / explicit full run).
+  // Default: light scrape + store (fits Vercel serverless limits).
+  // full=1: full orchestrator + public digest (long-running; Pro maxDuration).
+  const full = c.req.query('full') === '1'
+  const result = full ? await runGlobalFetch(c.env) : await runLightGlobalFetch(c.env)
+  if (!result.ok) return c.json(result, 500)
+  return c.json(result)
+})
+
+// Also allow GET for simple health-style pings from UI/tools (same as light POST).
+app.get('/trigger', async (c) => {
   const full = c.req.query('full') === '1'
   const result = full ? await runGlobalFetch(c.env) : await runLightGlobalFetch(c.env)
   if (!result.ok) return c.json(result, 500)
@@ -263,7 +271,8 @@ app.post('/trigger', async (c) => {
 })
 
 // Vercel Cron / external schedulers — Authorization: Bearer $CRON_SECRET
-// Vercel Cron uses GET; external tools may POST.
+// Vercel Cron uses GET. Default is LIGHT so free/hobby functions don't time out.
+// Pass ?full=1 for full AI pipeline when maxDuration allows.
 async function handleCronFetch(c: Context<{ Bindings: Env }>) {
   const secret = c.env.CRON_SECRET
   if (secret) {
@@ -274,9 +283,18 @@ async function handleCronFetch(c: Context<{ Bindings: Env }>) {
       return c.json({ error: 'unauthorized' }, 401)
     }
   }
-  const result = await runGlobalFetch(c.env)
-  if (!result.ok) return c.json(result, 500)
-  return c.json(result)
+  const full = c.req.query('full') === '1'
+  try {
+    const result = full ? await runGlobalFetch(c.env) : await runLightGlobalFetch(c.env)
+    if (!result.ok) return c.json(result, 500)
+    return c.json(result)
+  } catch (err) {
+    // Last-resort: never leave cron hanging on unhandled throw
+    reportError(c.env, err instanceof Error ? err : new Error(String(err)), {
+      path: '/cron/fetch',
+    })
+    return c.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, 500)
+  }
 }
 app.get('/cron/fetch', handleCronFetch)
 app.post('/cron/fetch', handleCronFetch)
@@ -372,9 +390,9 @@ app.post('/auth/logout', async (c) => {
 })
 
 app.get('/auth/me', async (c) => {
+  // Always 200 — clients check `user` presence. 401 broke some UI hydrations.
   const user = await requireAuth(c.req.raw, c.env, getDB(c.env))
-  if (!user) return c.json({ user: null }, 401)
-  return c.json({ user })
+  return c.json({ user: user ?? null })
 })
 
 // ===== Source CRUD (auth required) =====

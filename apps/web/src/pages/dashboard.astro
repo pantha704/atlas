@@ -183,10 +183,11 @@ const showAuthActions = Boolean(userName)
   <Card class="mt-6" padding="sm">
     <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div class="flex flex-wrap items-center gap-2" id="digest-actions">
-        <!-- Use HTML hidden attr (not Tailwind class) so client can toggle reliably -->
+        <!-- HTML hidden attr (not Tailwind) so client can toggle reliably -->
         <button
           type="button"
           id="myDigestBtn"
+          data-action="generate"
           class="inline-flex h-8 items-center justify-center gap-2 rounded-md bg-primary px-3 text-xs font-medium text-[#ffffff] shadow-sm hover:bg-primary-hover disabled:opacity-50"
           hidden={!showAuthActions}
         >
@@ -195,6 +196,7 @@ const showAuthActions = Boolean(userName)
         <button
           type="button"
           id="fetchMoreBtn"
+          data-action="fetch-more"
           class="inline-flex h-8 items-center justify-center gap-2 rounded-md border border-border bg-surface px-3 text-xs font-medium text-text hover:border-primary/50 hover:bg-surface-2 disabled:opacity-50"
           hidden={!showAuthActions}
         >
@@ -203,6 +205,7 @@ const showAuthActions = Boolean(userName)
         <button
           type="button"
           id="forceDigestBtn"
+          data-action="force-rescore"
           class="inline-flex h-8 items-center justify-center gap-2 rounded-md border border-border bg-surface px-3 text-xs font-medium text-text hover:border-primary/50 hover:bg-surface-2 disabled:opacity-50"
           hidden={!showAuthActions}
         >
@@ -211,12 +214,17 @@ const showAuthActions = Boolean(userName)
         <button
           type="button"
           id="triggerBtn"
-          class="inline-flex h-8 items-center justify-center gap-2 rounded-md px-3 text-xs font-medium text-text-muted hover:bg-surface-2 hover:text-text disabled:opacity-50"
+          data-action="global-pipeline"
+          class="inline-flex h-8 items-center justify-center gap-2 rounded-md border border-border bg-surface px-3 text-xs font-medium text-text hover:border-primary/50 hover:bg-surface-2 disabled:opacity-50"
         >
           Run global pipeline
         </button>
       </div>
-      <p id="triggerStatus" class="text-xs text-text-muted sm:text-right" aria-live="polite"></p>
+      <p
+        id="triggerStatus"
+        class="min-h-[1.25rem] text-xs text-text-muted sm:max-w-xs sm:text-right"
+        aria-live="polite"
+      ></p>
     </div>
     {
       itemMeta && mode === 'personal' && (
@@ -500,6 +508,20 @@ const showAuthActions = Boolean(userName)
       })
     }
 
+    function setBusy(btn, busy, idleLabel) {
+      if (!btn) return
+      if (busy) {
+        btn.dataset.idleLabel = idleLabel || btn.textContent || ''
+        btn.setAttribute('disabled', 'true')
+        btn.setAttribute('aria-busy', 'true')
+        btn.textContent = 'Working…'
+      } else {
+        btn.removeAttribute('disabled')
+        btn.removeAttribute('aria-busy')
+        btn.textContent = btn.dataset.idleLabel || idleLabel || btn.textContent
+      }
+    }
+
     async function checkAuth() {
       try {
         const res = await fetch(`${apiUrl}/auth/me`, { credentials: 'include' })
@@ -518,6 +540,8 @@ const showAuthActions = Boolean(userName)
                 ? 'Showing your personal digest.'
                 : 'Showing your personal digest (cached).',
             )
+          } else if (body.data?.code === 'no_cache' || body.status === 404) {
+            setStatus('No personal digest yet — click Generate my digest.')
           }
         } catch {}
       } catch {}
@@ -526,29 +550,34 @@ const showAuthActions = Boolean(userName)
     async function loadMyDigest(opts) {
       const force = !!opts?.force
       const limit = opts?.limit ?? 15
-      setStatus(
-        force
-          ? `Rescoring up to ${limit} items…`
-          : `Generating digest (up to ${limit} items)…`,
-      )
+      const label = opts?.label || (force ? 'Rescoring' : 'Generating')
+      setStatus(`${label} (up to ${limit} items)… this can take up to a minute`)
       try {
         const q = new URLSearchParams({ fast: '1', limit: String(limit) })
         if (force) q.set('force', '1')
-        const res = await fetch(`${apiUrl}/my-digest?${q}`, { credentials: 'include' })
-        const { ok, data } = await readJson(res)
+        const res = await fetch(`${apiUrl}/my-digest?${q}`, {
+          credentials: 'include',
+          headers: { Accept: 'application/json' },
+        })
+        const { ok, data, status } = await readJson(res)
         if (ok && (data?.markdown || data?.html)) {
           const c = data.itemCounts ?? {}
           showDigest(
             data,
             c.cached
               ? 'Loaded cached digest.'
-              : `Done — ${c.scored ?? 0} items (limit ${c.limit ?? limit}).`,
+              : `Done — ${c.scored ?? 0} items scored (limit ${c.limit ?? limit}).`,
           )
+        } else if (status === 401) {
+          setStatus('Session expired — sign in again.')
+          setTimeout(() => {
+            location.href = '/signup'
+          }, 1200)
         } else {
           setStatus(
             data?.error ??
               data?.code ??
-              'Generate failed. Ensure sources exist and GROQ_API_KEY is set.',
+              'Generate failed. Run global pipeline first, then try again. Needs GROQ_API_KEY.',
           )
         }
       } catch (e) {
@@ -558,49 +587,48 @@ const showAuthActions = Boolean(userName)
 
     document.getElementById('triggerBtn')?.addEventListener('click', async () => {
       const btn = document.getElementById('triggerBtn')
-      if (btn) btn.setAttribute('disabled', 'true')
-      setStatus('Fetching latest sources… (light pipeline, ~30s)')
+      setBusy(btn, true, 'Run global pipeline')
+      setStatus('Fetching latest sources… (light pipeline)')
       try {
-        // Content-Type required so Astro CSRF (if re-enabled) treats this as JSON, not a form
         const res = await fetch(`${apiUrl}/trigger`, {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: '{}',
         })
-        const { ok, data } = await readJson(res)
+        const { ok, data, status } = await readJson(res)
         if (ok && data?.ok) {
           setStatus(
-            `Fetched ${data.items ?? 0} items (stored ${data.stored ?? 0}). Click Generate or Fetch more (30).`,
+            `✓ Pipeline OK — ${data.items ?? 0} items fetched, ${data.stored ?? 0} stored (${data.mode || 'light'}). Next: Generate or Fetch more.`,
           )
         } else {
-          setStatus(`Failed: ${data?.error ?? `HTTP ${res.status}`}`)
+          setStatus(`Pipeline failed: ${data?.error ?? `HTTP ${status}`}`)
         }
       } catch (e) {
-        setStatus(`Error: ${e.message}`)
+        setStatus(`Pipeline error: ${e.message}`)
       }
-      if (btn) btn.removeAttribute('disabled')
+      setBusy(btn, false, 'Run global pipeline')
     })
 
     document.getElementById('myDigestBtn')?.addEventListener('click', async () => {
       const btn = document.getElementById('myDigestBtn')
-      if (btn) btn.setAttribute('disabled', 'true')
-      await loadMyDigest({ force: false, limit: 15 })
-      if (btn) btn.removeAttribute('disabled')
+      setBusy(btn, true, 'Generate my digest')
+      await loadMyDigest({ force: false, limit: 15, label: 'Generating digest' })
+      setBusy(btn, false, 'Generate my digest')
     })
 
     document.getElementById('fetchMoreBtn')?.addEventListener('click', async () => {
       const btn = document.getElementById('fetchMoreBtn')
-      if (btn) btn.setAttribute('disabled', 'true')
-      await loadMyDigest({ force: true, limit: 30 })
-      if (btn) btn.removeAttribute('disabled')
+      setBusy(btn, true, 'Fetch more (30)')
+      await loadMyDigest({ force: true, limit: 30, label: 'Fetching & rescoring more items' })
+      setBusy(btn, false, 'Fetch more (30)')
     })
 
     document.getElementById('forceDigestBtn')?.addEventListener('click', async () => {
       const btn = document.getElementById('forceDigestBtn')
-      if (btn) btn.setAttribute('disabled', 'true')
-      await loadMyDigest({ force: true, limit: 15 })
-      if (btn) btn.removeAttribute('disabled')
+      setBusy(btn, true, 'Force rescore')
+      await loadMyDigest({ force: true, limit: 15, label: 'Force rescoring' })
+      setBusy(btn, false, 'Force rescore')
     })
 
     // SSR already unhid buttons when session was known; checkAuth covers cookie-only clients
