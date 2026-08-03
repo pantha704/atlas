@@ -1,5 +1,5 @@
-import type { APIRoute } from 'astro'
 import { app } from '@atlas/api'
+import type { APIRoute } from 'astro'
 
 export const prerender = false
 // Pipeline / cron can run long — raise Vercel function limit (Pro plan allows up to 300s)

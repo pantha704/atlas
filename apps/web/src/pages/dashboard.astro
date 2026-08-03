@@ -102,7 +102,13 @@ if (!digestMd && !digestError) {
 const articleHtml = digestHtml || (digestMd ? renderDigestMarkdown(digestMd) : '')
 
 const modeLabel =
-  mode === 'personal' ? 'Personalized' : mode === 'public' ? 'Global' : mode === 'demo' ? 'Demo' : 'Empty'
+  mode === 'personal'
+    ? 'Personalized'
+    : mode === 'public'
+      ? 'Global'
+      : mode === 'demo'
+        ? 'Demo'
+        : 'Empty'
 
 const subtitle =
   mode === 'personal'

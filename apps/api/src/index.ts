@@ -293,13 +293,7 @@ app.get('/auth/github', (c) => {
   const url = githubAuthUrl(c.env, state)
   // State cookie for CSRF — Secure on https
   const secure = (c.env.APP_URL ?? '').startsWith('https://')
-  const flags = [
-    `atlas_oauth_state=${state}`,
-    'Path=/',
-    'Max-Age=600',
-    'HttpOnly',
-    'SameSite=Lax',
-  ]
+  const flags = [`atlas_oauth_state=${state}`, 'Path=/', 'Max-Age=600', 'HttpOnly', 'SameSite=Lax']
   if (secure) flags.push('Secure')
   appendCookie(c, flags.join('; '))
   return c.redirect(url)
@@ -339,7 +333,11 @@ async function handleAuthCallback(c: Context) {
   // v0.7: Record referral if cookie present
   const refCookie = c.req.header('cookie')?.match(/atlas_ref=([^;]+)/)?.[1]
   if (refCookie && refCookie !== user.id) {
-    const existing = await db.select().from(referrals).where(eq(referrals.referredId, user.id)).limit(1)
+    const existing = await db
+      .select()
+      .from(referrals)
+      .where(eq(referrals.referredId, user.id))
+      .limit(1)
     if (existing.length === 0) {
       await db.insert(referrals).values({
         id: crypto.randomUUID(),
@@ -425,10 +423,7 @@ app.post('/sources', async (c) => {
 
   const db = getDB(c.env)
   const plan = user.plan as Plan
-  const existing = await db
-    .select({ n: count() })
-    .from(sources)
-    .where(eq(sources.userId, user.id))
+  const existing = await db.select({ n: count() }).from(sources).where(eq(sources.userId, user.id))
   const sourceCount = existing[0]?.n ?? 0
   if (!canAddSource(plan, sourceCount)) {
     return c.json({ error: sourceLimitMessage(plan), code: 'source_limit', limit: 10 }, 403)
@@ -687,7 +682,7 @@ app.get('/my-digest', async (c) => {
   const sinceIso = since.toISOString()
 
   // 1. Prefer DB items (fast). Live fetch only if empty or force+!fast
-  let stored = await loadRecentItems(db, sinceIso)
+  const stored = await loadRecentItems(db, sinceIso)
   let live: ContentItem[] = []
   if (!fast || stored.length === 0) {
     try {
@@ -709,8 +704,7 @@ app.get('/my-digest', async (c) => {
   if (merged.length === 0) {
     return c.json(
       {
-        error:
-          'No items to score. Run global pipeline first or wait for cron, then try again.',
+        error: 'No items to score. Run global pipeline first or wait for cron, then try again.',
         code: 'no_items',
       },
       404,
@@ -828,12 +822,7 @@ app.get('/my-digest', async (c) => {
 
   // 5. Render + upsert digest for today
   const summarizer = new DailySummarizer()
-  const markdown = await summarizer.generateSummary(
-    deduped,
-    today,
-    merged.length,
-    profile.language,
-  )
+  const markdown = await summarizer.generateSummary(deduped, today, merged.length, profile.language)
 
   const existingToday = await db
     .select()
@@ -843,7 +832,7 @@ app.get('/my-digest', async (c) => {
   const itemsJson = JSON.stringify(
     deduped.map((i) => ({ id: i.id, title: i.title, score: i.aiScore })),
   )
-  let digestId = existingToday[0]?.id ?? crypto.randomUUID()
+  const digestId = existingToday[0]?.id ?? crypto.randomUUID()
   if (existingToday[0]) {
     await db
       .update(digests)
@@ -869,7 +858,9 @@ app.get('/my-digest', async (c) => {
   // 6. Delivery — pro only (skip on fast to keep under timeout)
   if (!fast) {
     const deliveryPrefs = parseDeliveryPrefs(profileRow[0]?.deliveryPrefs)
-    const siteUrl = (c.env.WEB_URL ?? c.env.APP_URL ?? 'https://atlas-nine-ashy.vercel.app') as string
+    const siteUrl = (c.env.WEB_URL ??
+      c.env.APP_URL ??
+      'https://atlas-nine-ashy.vercel.app') as string
     const subject = `Atlas — Your Daily Digest (${today})`
 
     if (deliveryPrefs.email && user.email && canUseDelivery(plan, 'email')) {
@@ -1220,10 +1211,7 @@ app.post('/billing/checkout', async (c) => {
   }
   // Persist subscription / payment-link id for cancel reconciliation
   if (result.sessionId) {
-    await db
-      .update(users)
-      .set({ stripeCustomerId: result.sessionId })
-      .where(eq(users.id, user.id))
+    await db.update(users).set({ stripeCustomerId: result.sessionId }).where(eq(users.id, user.id))
   }
   return c.json({
     ok: true,
@@ -1236,8 +1224,7 @@ app.post('/billing/checkout', async (c) => {
 
 app.post('/billing/webhook', async (c) => {
   const rawBody = await c.req.text()
-  const sig =
-    c.req.header('x-razorpay-signature') ?? c.req.header('X-Razorpay-Signature') ?? null
+  const sig = c.req.header('x-razorpay-signature') ?? c.req.header('X-Razorpay-Signature') ?? null
   const verified = await verifyRazorpayWebhook(c.env, rawBody, sig)
   if (!verified.ok) return c.json({ error: verified.error }, 400)
 
@@ -1265,7 +1252,11 @@ app.post('/billing/webhook', async (c) => {
 
   if (userId && isProDowngradeEvent(event.event)) {
     await db.update(users).set({ plan: 'free', trialEndsAt: null }).where(eq(users.id, userId))
-    track(c.env, 'plan_downgraded', userId, { plan: 'free', source: 'razorpay', event: event.event })
+    track(c.env, 'plan_downgraded', userId, {
+      plan: 'free',
+      source: 'razorpay',
+      event: event.event,
+    })
   } else if (!userId && subId && isProDowngradeEvent(event.event)) {
     await db
       .update(users)
@@ -1588,7 +1579,8 @@ function buildUserConfig(
         if (!config.ossinsight.enabled) {
           config.ossinsight = {
             enabled: true,
-            period: (s.config.period as Config['sources']['ossinsight']['period']) ?? 'past_24_hours',
+            period:
+              (s.config.period as Config['sources']['ossinsight']['period']) ?? 'past_24_hours',
             languages: Array.isArray(s.config.languages)
               ? (s.config.languages as string[])
               : ['All'],
@@ -1658,7 +1650,9 @@ async function runLightGlobalFetch(env: Env): Promise<{
       ...DEFAULT_CONFIG,
       ai: buildAIConfig(env),
     }
-    const since = new Date(Date.now() - Math.max(config.filtering.timeWindowHours, 48) * 3600 * 1000)
+    const since = new Date(
+      Date.now() - Math.max(config.filtering.timeWindowHours, 48) * 3600 * 1000,
+    )
     const live = await fetchAllSources(config, since)
     const db = getDB(env)
     const idMap = await storeGlobalItems(db, live)

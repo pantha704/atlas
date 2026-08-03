@@ -15,9 +15,9 @@ describe('billingConfigured', () => {
   })
 
   it('true when key id + secret set', () => {
-    expect(
-      billingConfigured({ RAZORPAY_KEY_ID: 'rzp_test', RAZORPAY_KEY_SECRET: 'secret' }),
-    ).toBe(true)
+    expect(billingConfigured({ RAZORPAY_KEY_ID: 'rzp_test', RAZORPAY_KEY_SECRET: 'secret' })).toBe(
+      true,
+    )
   })
 })
 
@@ -76,11 +76,7 @@ describe('verifyRazorpayWebhook', () => {
     const sigBuf = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body))
     const sig = [...new Uint8Array(sigBuf)].map((b) => b.toString(16).padStart(2, '0')).join('')
 
-    const verified = await verifyRazorpayWebhook(
-      { RAZORPAY_WEBHOOK_SECRET: secret },
-      body,
-      sig,
-    )
+    const verified = await verifyRazorpayWebhook({ RAZORPAY_WEBHOOK_SECRET: secret }, body, sig)
     expect(verified.ok).toBe(true)
     if (verified.ok) {
       expect(verified.event.event).toBe('payment.captured')

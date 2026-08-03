@@ -8,13 +8,16 @@ import {
   rowToContentItem,
 } from '@atlas/core'
 import { items, scores } from '@atlas/db'
-import { and, eq, gte, inArray } from 'drizzle-orm'
 import type { createDB } from '@atlas/db'
+import { and, eq, gte, inArray } from 'drizzle-orm'
 
 type DB = ReturnType<typeof createDB>['db']
 
 /** Upsert fetched items into the global items table (by external_id). */
-export async function storeGlobalItems(db: DB, fetched: ContentItem[]): Promise<Map<string, string>> {
+export async function storeGlobalItems(
+  db: DB,
+  fetched: ContentItem[],
+): Promise<Map<string, string>> {
   // externalId → db item id
   const idMap = new Map<string, string>()
   for (const item of fetched) {
@@ -47,11 +50,7 @@ export async function storeGlobalItems(db: DB, fetched: ContentItem[]): Promise<
 
 /** Load recent global items (time window). */
 export async function loadRecentItems(db: DB, sinceIso: string): Promise<ContentItem[]> {
-  const rows = await db
-    .select()
-    .from(items)
-    .where(gte(items.publishedAt, sinceIso))
-    .limit(500)
+  const rows = await db.select().from(items).where(gte(items.publishedAt, sinceIso)).limit(500)
   return rows.map((r) =>
     rowToContentItem({
       id: r.id,
@@ -97,10 +96,7 @@ export async function loadUserScoreMap(
   if (externalIds.length === 0) return map
 
   // Resolve external ids → item rows
-  const itemRows = await db
-    .select()
-    .from(items)
-    .where(inArray(items.externalId, externalIds))
+  const itemRows = await db.select().from(items).where(inArray(items.externalId, externalIds))
   if (itemRows.length === 0) return map
 
   const itemIdToExternal = new Map(itemRows.map((r) => [r.id, r.externalId]))
@@ -164,9 +160,6 @@ export async function upsertUserScore(
 }
 
 /** Merge live fetch with already-stored global items, URL-deduped. */
-export function mergeFetchedWithStored(
-  live: ContentItem[],
-  stored: ContentItem[],
-): ContentItem[] {
+export function mergeFetchedWithStored(live: ContentItem[], stored: ContentItem[]): ContentItem[] {
   return mergeCrossSourceDuplicates([...live, ...stored])
 }

@@ -4,7 +4,7 @@
  *   set -a && source <(grep -v '^#' apps/api/.dev.vars | sed 's/^/export /') && set +a
  *   bun run scripts/seed-pipeline.ts
  */
-import { Orchestrator, createAIClient, DEFAULT_CONFIG } from '@atlas/core'
+import { DEFAULT_CONFIG, Orchestrator, createAIClient } from '@atlas/core'
 import { createDB, digests } from '@atlas/db'
 import { and, eq } from 'drizzle-orm'
 import { storeGlobalItems } from '../apps/api/src/pipeline'

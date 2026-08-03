@@ -80,8 +80,7 @@ async function createSubscriptionCheckout(
   env: BillingEnv,
   opts: { planId: string; userId: string; email: string; name?: string; site: string },
 ): Promise<
-  | { url: string; sessionId: string; mode: 'subscription' }
-  | { error: string; status: number }
+  { url: string; sessionId: string; mode: 'subscription' } | { error: string; status: number }
 > {
   // total_count: 120 months ≈ 10y; cancel anytime via Razorpay dashboard / future portal
   const body = {
@@ -126,7 +125,8 @@ async function createSubscriptionCheckout(
   // Fallback: Standard Checkout page we host? Without short_url, build payment page URL isn't public.
   // Razorpay always returns short_url for subscriptions when customer_notify is set — if missing, fail clearly.
   return {
-    error: 'Razorpay subscription created but short_url missing — enable hosted payment in plan settings',
+    error:
+      'Razorpay subscription created but short_url missing — enable hosted payment in plan settings',
     status: 502,
   }
 }
@@ -135,8 +135,7 @@ async function createPaymentLinkCheckout(
   env: BillingEnv,
   opts: { userId: string; email: string; name?: string; site: string },
 ): Promise<
-  | { url: string; sessionId: string; mode: 'payment_link' }
-  | { error: string; status: number }
+  { url: string; sessionId: string; mode: 'payment_link' } | { error: string; status: number }
 > {
   const amount = Number(env.RAZORPAY_AMOUNT_PAISE ?? '69900')
   if (!Number.isFinite(amount) || amount < 100) {

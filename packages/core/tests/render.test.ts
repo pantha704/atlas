@@ -91,7 +91,7 @@ describe('renderDigestMarkdown', () => {
   })
 
   it('folds item markers onto h2 and never shows raw anchors as text', () => {
-    const md = `[[item:1]]\n\n## [Title](https://example.com) ⭐️ 8/10\n\nBody`
+    const md = '[[item:1]]\n\n## [Title](https://example.com) ⭐️ 8/10\n\nBody'
     const html = renderDigestMarkdown(md)
     expect(html).toContain('id="item-1"')
     expect(html).toContain('score-badge')

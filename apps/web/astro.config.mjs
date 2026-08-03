@@ -1,7 +1,7 @@
-import tailwindcss from '@tailwindcss/vite'
-import { defineConfig } from 'astro/config'
 import { fileURLToPath } from 'node:url'
 import vercel from '@astrojs/vercel'
+import tailwindcss from '@tailwindcss/vite'
+import { defineConfig } from 'astro/config'
 
 const STUB = fileURLToPath(new URL('./src/lib/sqlite-stub.mjs', import.meta.url))
 

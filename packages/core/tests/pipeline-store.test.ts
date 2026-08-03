@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  contentItemToRow,
-  demoItems,
-  rowToContentItem,
-} from '../src/pipeline-store'
+import { contentItemToRow, demoItems, rowToContentItem } from '../src/pipeline-store'
 import type { ContentItem } from '../src/types'
 
 describe('pipeline-store', () => {

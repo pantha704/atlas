@@ -106,7 +106,7 @@ export async function captureSentry(
       'Content-Type': 'application/json',
       'X-Sentry-Auth': [
         'Sentry sentry_version=7',
-        `sentry_client=atlas-api/0.5`,
+        'sentry_client=atlas-api/0.5',
         `sentry_key=${parsed.publicKey}`,
       ].join(', '),
     },

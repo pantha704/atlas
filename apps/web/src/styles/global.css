@@ -37,13 +37,13 @@
   --color-slate-600: #d0d6e0;
 
   /* Type scale */
-  --text-xs: 0.75rem;  /* 12 */
+  --text-xs: 0.75rem; /* 12 */
   --text-sm: 0.875rem; /* 14 */
-  --text-base: 1rem;   /* 16 */
+  --text-base: 1rem; /* 16 */
   --text-lg: 1.125rem; /* 18 */
-  --text-2xl: 1.5rem;  /* 24 */
-  --text-3xl: 2rem;    /* 32 */
-  --text-4xl: 3rem;    /* 48 */
+  --text-2xl: 1.5rem; /* 24 */
+  --text-3xl: 2rem; /* 32 */
+  --text-4xl: 3rem; /* 48 */
 
   /* === Semantic tokens — light === */
   --color-bg: #f7f8f8;
@@ -69,7 +69,8 @@
   --radius-lg: 0.5rem;
 
   /* Font — Inter static; weights that always exist on system fallbacks */
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --font-weight-emphasis: 600;
   --color-on-primary: #ffffff;
@@ -160,8 +161,12 @@ select:focus-visible {
 
 /* Skeleton shimmer for loading states */
 @keyframes atlas-shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
 .atlas-skeleton {
   background: linear-gradient(
@@ -175,7 +180,10 @@ select:focus-visible {
   border-radius: var(--radius-sm);
 }
 @media (prefers-reduced-motion: reduce) {
-  .atlas-skeleton { animation: none; opacity: 0.6; }
+  .atlas-skeleton {
+    animation: none;
+    opacity: 0.6;
+  }
 }
 
 /* Status banner */
@@ -204,10 +212,17 @@ select:focus-visible {
 }
 
 /* Emphasized UI text — use 600 so system fallbacks never drop glyphs */
-:where(strong, b, .emphasis) { font-weight: var(--font-weight-emphasis); }
-:where(button, .nav-link) { font-weight: 500; }
+:where(strong, b, .emphasis) {
+  font-weight: var(--font-weight-emphasis);
+}
+:where(button, .nav-link) {
+  font-weight: 500;
+}
 
-h1, h2, h3, h4 {
+h1,
+h2,
+h3,
+h4 {
   letter-spacing: -0.022em;
   font-weight: 600;
   color: var(--color-text);
@@ -253,10 +268,19 @@ button.bg-primary:hover,
   color: #fff;
   letter-spacing: 0.02em;
 }
-.score-badge[data-tier="high"] { background: var(--color-score-high); }
-.score-badge[data-tier="good"] { background: var(--color-score-good); }
-.score-badge[data-tier="mid"]  { background: var(--color-score-mid); color: #0f1011; }
-.score-badge[data-tier="low"]  { background: var(--color-score-low); }
+.score-badge[data-tier="high"] {
+  background: var(--color-score-high);
+}
+.score-badge[data-tier="good"] {
+  background: var(--color-score-good);
+}
+.score-badge[data-tier="mid"] {
+  background: var(--color-score-mid);
+  color: #0f1011;
+}
+.score-badge[data-tier="low"] {
+  background: var(--color-score-low);
+}
 
 @media (prefers-reduced-motion: reduce) {
   * {
@@ -292,7 +316,9 @@ button.bg-primary:hover,
 .prose-atlas h2 a:hover {
   color: var(--color-accent);
 }
-.prose-atlas p { margin: 0.75rem 0; }
+.prose-atlas p {
+  margin: 0.75rem 0;
+}
 .prose-atlas blockquote {
   border-left: 3px solid var(--color-accent);
   padding-left: 1rem;
@@ -314,10 +340,20 @@ button.bg-primary:hover,
   color: var(--color-text);
   border: 1px solid var(--color-border-subtle);
 }
-.prose-atlas a { color: var(--color-accent); }
-.prose-atlas a:hover { color: var(--color-primary-hover); }
-.prose-atlas strong { font-weight: var(--font-weight-emphasis); color: var(--color-text); }
-.prose-atlas ul { margin: 0.5rem 0; padding-left: 1.5rem; }
+.prose-atlas a {
+  color: var(--color-accent);
+}
+.prose-atlas a:hover {
+  color: var(--color-primary-hover);
+}
+.prose-atlas strong {
+  font-weight: var(--font-weight-emphasis);
+  color: var(--color-text);
+}
+.prose-atlas ul {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}
 .prose-atlas details {
   margin: 0.75rem 0;
   border: 1px solid var(--color-border);

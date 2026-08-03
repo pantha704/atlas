@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  FREE_SOURCE_LIMIT,
-  canAddSource,
-  canUseDelivery,
-  impactTopN,
-} from '../src/limits'
+import { FREE_SOURCE_LIMIT, canAddSource, canUseDelivery, impactTopN } from '../src/limits'
 
 describe('plan limits', () => {
   it('caps free sources at FREE_SOURCE_LIMIT', () => {

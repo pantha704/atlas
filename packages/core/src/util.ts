@@ -197,10 +197,7 @@ export function renderDigestMarkdown(md: string): string {
 
   // TOC: 1. [title](#item-N) ⭐️ N/10
   html = html.replace(
-    new RegExp(
-      `^(\\d+)\\. \\[([^\\]]+)\\]\\(#item-(\\d+)\\) ${STAR} (\\d+(?:\\.\\d+)?)/10`,
-      'gm',
-    ),
+    new RegExp(`^(\\d+)\\. \\[([^\\]]+)\\]\\(#item-(\\d+)\\) ${STAR} (\\d+(?:\\.\\d+)?)/10`, 'gm'),
     (_m, num, title, id, score) =>
       `<div class="toc-item"><span class="toc-num">${num}.</span> <a href="#item-${id}">${title}</a> <span class="score-badge" data-tier="${scoreTier(Number(score))}">${score}/10</span></div>`,
   )
@@ -224,10 +221,7 @@ export function renderDigestMarkdown(md: string): string {
   html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>')
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
-  html = html.replace(
-    /\[([^\]]+)\]\(([^)]+)\)/g,
-    '<a href="$2" rel="noopener noreferrer">$1</a>',
-  )
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" rel="noopener noreferrer">$1</a>')
 
   // Restore list item links that were intentional HTML from summarizer
   html = html.replace(
